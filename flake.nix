@@ -16,6 +16,7 @@
         pkgs = import nixpkgs { inherit system; config.allowUnfree = true; };
 
         androidSdk = android-nixpkgs.sdk.${system} (sdkPkgs: with sdkPkgs; [
+          build-tools-34-0-0
           build-tools-35-0-0
           cmdline-tools-latest
           platform-tools
