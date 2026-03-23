@@ -4,6 +4,9 @@ import com.example.streetvoicetv.data.api.StreetVoiceApi
 import com.example.streetvoicetv.data.model.AlbumDetailResponse
 import com.example.streetvoicetv.data.model.AlbumResult
 import com.example.streetvoicetv.data.model.AlbumSongResult
+import com.example.streetvoicetv.data.model.NestedSong
+import com.example.streetvoicetv.data.model.PlaylistDetailResponse
+import com.example.streetvoicetv.data.model.PlaylistResult
 import com.example.streetvoicetv.data.model.SearchSongResult
 import com.example.streetvoicetv.data.model.SongDetailResponse
 import com.example.streetvoicetv.data.model.UserDetailResponse
@@ -12,6 +15,7 @@ import com.example.streetvoicetv.data.model.UserSongResult
 import com.example.streetvoicetv.domain.model.Album
 import com.example.streetvoicetv.domain.model.Artist
 import com.example.streetvoicetv.domain.model.PlayableStream
+import com.example.streetvoicetv.domain.model.Playlist
 import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.domain.repository.StreetVoiceRepository
 import javax.inject.Inject
@@ -83,6 +87,38 @@ class StreetVoiceRepositoryImpl @Inject constructor(
             api.getAlbumSongs(albumId, limit, offset).results.map { it.toDomain() }
         }
     }
+
+    // --- Home / Discover ---
+
+    override suspend fun getRealtimeChart(limit: Int): Result<List<Song>> {
+        return runCatching {
+            api.getRealtimeChart(limit = limit).results.map { it.song.toDomain() }
+        }
+    }
+
+    override suspend fun getEditorChoice(limit: Int): Result<List<Song>> {
+        return runCatching {
+            api.getEditorChoice(limit = limit).results.map { it.contentObject.toDomain() }
+        }
+    }
+
+    override suspend fun getPlaylistDetail(playlistId: Int): Result<Playlist> {
+        return runCatching {
+            api.getPlaylistDetail(playlistId).toDomain()
+        }
+    }
+
+    override suspend fun getRecommendedPlaylists(limit: Int): Result<List<Playlist>> {
+        return runCatching {
+            api.getSectionPlaylists(sectionId = 1, limit = limit).results.map { it.toDomain() }
+        }
+    }
+
+    override suspend fun getPlaylistSongs(playlistId: Int, limit: Int): Result<List<Song>> {
+        return runCatching {
+            api.getPlaylistSongs(playlistId, limit = limit).results.map { it.song.toDomain() }
+        }
+    }
 }
 
 // --- Mappers ---
@@ -100,17 +136,22 @@ private fun SearchSongResult.toDomain(): Song = Song(
 private fun SongDetailResponse.toDomain(): Song = Song(
     id = id,
     name = name,
-    artistName = user.nickname ?: user.username,
+    artistName = user.profile?.nickname ?: user.username,
     artistUsername = user.username,
     imageUrl = image,
     durationSeconds = length,
-    playsCount = 0,
+    playsCount = playsCount,
     genre = genre,
     synopsis = synopsis,
     lyrics = lyrics,
+    likesCount = likesCount,
+    commentsCount = commentsCount,
+    shareCount = shareCount,
+    publishAt = publishAt,
+    albumId = album?.id,
     albumName = album?.name,
     albumImageUrl = album?.image,
-    artistProfileImageUrl = user.profileImage,
+    artistProfileImageUrl = user.profile?.image,
 )
 
 private fun UserSearchResult.toDomain(): Artist = Artist(
@@ -175,4 +216,34 @@ private fun AlbumDetailResponse.toDomain(): Album = Album(
     artistName = user?.nickname ?: user?.username,
     artistUsername = user?.username,
     createdAt = createdAt,
+)
+
+private fun NestedSong.toDomain(): Song = Song(
+    id = id,
+    name = name,
+    artistName = user.profile?.nickname ?: user.username,
+    artistUsername = user.username,
+    imageUrl = image,
+    durationSeconds = length,
+    playsCount = playsCount,
+)
+
+private fun PlaylistDetailResponse.toDomain(): Playlist = Playlist(
+    id = id,
+    name = name,
+    imageUrl = image,
+    description = description,
+    songsCount = songsCount,
+    playsCount = playsCount,
+    likesCount = likesCount,
+    curatorName = user?.profile?.nickname ?: user?.username,
+    createdAt = createdAt,
+)
+
+private fun PlaylistResult.toDomain(): Playlist = Playlist(
+    id = id,
+    name = name,
+    imageUrl = image,
+    songsCount = songsCount,
+    curatorName = user?.profile?.nickname ?: user?.username,
 )

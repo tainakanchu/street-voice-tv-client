@@ -26,7 +26,9 @@ import com.example.streetvoicetv.playback.PlaybackManager
 import com.example.streetvoicetv.ui.album.AlbumScreen
 import com.example.streetvoicetv.ui.artist.ArtistScreen
 import com.example.streetvoicetv.ui.components.NowPlayingBar
+import com.example.streetvoicetv.ui.home.HomeScreen
 import com.example.streetvoicetv.ui.player.PlayerScreen
+import com.example.streetvoicetv.ui.playlist.PlaylistScreen
 import com.example.streetvoicetv.ui.search.SearchScreen
 import com.example.streetvoicetv.ui.theme.StreetVoiceTvTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -58,10 +60,8 @@ fun StreetVoiceTvApp(playbackManager: PlaybackManager) {
 
     val showNowPlaying = playbackState.hasMedia && currentRoute?.startsWith("player") != true
 
-    /** 曲リストの中から1曲を選んでキュー付きで再生開始 → プレイヤー画面へ */
     fun playSongInList(songs: List<Song>, selected: Song) {
         val index = songs.indexOfFirst { it.id == selected.id }.coerceAtLeast(0)
-        // キューをセット (HLS URL は PlayerViewModel or PlaybackManager が取得)
         playbackManager.setQueue(songs, index)
         navController.navigate("player/${selected.id}")
     }
@@ -73,14 +73,22 @@ fun StreetVoiceTvApp(playbackManager: PlaybackManager) {
     ) {
         NavHost(
             navController = navController,
-            startDestination = "search",
+            startDestination = "home",
             modifier = Modifier.fillMaxSize(),
         ) {
+            composable("home") {
+                HomeScreen(
+                    onSongSelected = { song, allSongs -> playSongInList(allSongs, song) },
+                    onPlaylistSelected = { playlist ->
+                        navController.navigate("playlist/${playlist.id}")
+                    },
+                    onSearchTap = { navController.navigate("search") },
+                )
+            }
+
             composable("search") {
                 SearchScreen(
-                    onSongSelected = { song, allSongs ->
-                        playSongInList(allSongs, song)
-                    },
+                    onSongSelected = { song, allSongs -> playSongInList(allSongs, song) },
                     onArtistSelected = { artist ->
                         navController.navigate("artist/${artist.username}")
                     },
@@ -89,42 +97,38 @@ fun StreetVoiceTvApp(playbackManager: PlaybackManager) {
 
             composable(
                 route = "player/{songId}",
-                arguments = listOf(
-                    navArgument("songId") { type = NavType.IntType },
-                ),
+                arguments = listOf(navArgument("songId") { type = NavType.IntType }),
             ) {
-                PlayerScreen(
-                    onBack = { navController.popBackStack() },
-                )
+                PlayerScreen(onBack = { navController.popBackStack() })
             }
 
             composable(
                 route = "artist/{username}",
-                arguments = listOf(
-                    navArgument("username") { type = NavType.StringType },
-                ),
+                arguments = listOf(navArgument("username") { type = NavType.StringType }),
             ) {
                 ArtistScreen(
-                    onSongSelected = { song, allSongs ->
-                        playSongInList(allSongs, song)
-                    },
-                    onAlbumSelected = { album ->
-                        navController.navigate("album/${album.id}")
-                    },
+                    onSongSelected = { song, allSongs -> playSongInList(allSongs, song) },
+                    onAlbumSelected = { album -> navController.navigate("album/${album.id}") },
                     onBack = { navController.popBackStack() },
                 )
             }
 
             composable(
                 route = "album/{albumId}",
-                arguments = listOf(
-                    navArgument("albumId") { type = NavType.IntType },
-                ),
+                arguments = listOf(navArgument("albumId") { type = NavType.IntType }),
             ) {
                 AlbumScreen(
-                    onSongSelected = { song, allSongs ->
-                        playSongInList(allSongs, song)
-                    },
+                    onSongSelected = { song, allSongs -> playSongInList(allSongs, song) },
+                    onBack = { navController.popBackStack() },
+                )
+            }
+
+            composable(
+                route = "playlist/{playlistId}",
+                arguments = listOf(navArgument("playlistId") { type = NavType.IntType }),
+            ) {
+                PlaylistScreen(
+                    onSongSelected = { song, allSongs -> playSongInList(allSongs, song) },
                     onBack = { navController.popBackStack() },
                 )
             }
@@ -135,9 +139,7 @@ fun StreetVoiceTvApp(playbackManager: PlaybackManager) {
                 playbackState = playbackState,
                 onTap = {
                     val songId = playbackState.song?.id
-                    if (songId != null) {
-                        navController.navigate("player/$songId")
-                    }
+                    if (songId != null) navController.navigate("player/$songId")
                 },
                 onTogglePlayPause = { playbackManager.togglePlayPause() },
                 modifier = Modifier

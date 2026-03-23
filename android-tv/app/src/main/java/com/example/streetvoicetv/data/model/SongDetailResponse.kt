@@ -12,6 +12,13 @@ data class SongDetailResponse(
     val genre: Int? = null,
     val synopsis: String? = null,
     val lyrics: String? = null,
+    @SerialName("lyrics_is_lrc") val lyricsIsLrc: Boolean = false,
+    @SerialName("plays_count") val playsCount: Int = 0,
+    @SerialName("likes_count") val likesCount: Int = 0,
+    @SerialName("comments_count") val commentsCount: Int = 0,
+    @SerialName("share_count") val shareCount: Int = 0,
+    @SerialName("publish_at") val publishAt: String? = null,
+    @SerialName("created_at") val createdAt: String? = null,
     val user: SongDetailUser,
     val album: SongDetailAlbum? = null,
 )
@@ -19,12 +26,18 @@ data class SongDetailResponse(
 @Serializable
 data class SongDetailUser(
     val username: String,
+    val profile: SongDetailUserProfile? = null,
+)
+
+@Serializable
+data class SongDetailUserProfile(
     val nickname: String? = null,
-    @SerialName("profile_image") val profileImage: String? = null,
+    val image: String? = null,
 )
 
 @Serializable
 data class SongDetailAlbum(
+    val id: Int = 0,
     val name: String,
     val image: String? = null,
 )

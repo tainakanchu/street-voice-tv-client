@@ -3,7 +3,12 @@ package com.example.streetvoicetv.data.api
 import com.example.streetvoicetv.data.model.AlbumDetailResponse
 import com.example.streetvoicetv.data.model.AlbumListResponse
 import com.example.streetvoicetv.data.model.AlbumSongsResponse
+import com.example.streetvoicetv.data.model.ChartResponse
+import com.example.streetvoicetv.data.model.EditorChoiceResponse
+import com.example.streetvoicetv.data.model.PlaylistDetailResponse
+import com.example.streetvoicetv.data.model.PlaylistSongsResponse
 import com.example.streetvoicetv.data.model.SearchResponse
+import com.example.streetvoicetv.data.model.SectionPlaylistsResponse
 import com.example.streetvoicetv.data.model.SongDetailResponse
 import com.example.streetvoicetv.data.model.StreamResponse
 import com.example.streetvoicetv.data.model.UserDetailResponse
@@ -86,6 +91,49 @@ class StreetVoiceApi @Inject constructor(
     suspend fun getAlbumSongs(albumId: Int, limit: Int, offset: Int): AlbumSongsResponse {
         val url = "${config.baseUrl}/api/v4/album/$albumId/songs/?limit=$limit&offset=$offset"
         return get(url) { json.decodeFromString<AlbumSongsResponse>(it) }
+    }
+
+    // --- Play Event ---
+
+    suspend fun reportPlay(songId: Int) {
+        val url = "${config.baseUrl}/api/v4/song/$songId/play/"
+        val emptyBody = "{}".toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url(url)
+            .post(emptyBody)
+            .addHeader("Accept", "application/json")
+            .addHeader("User-Agent", "StreetVoiceTV/1.0")
+            .addHeader("Referer", "${config.baseUrl}/")
+            .addHeader("X-Requested-With", "XMLHttpRequest")
+            .build()
+        executeRequest(request) { it }
+    }
+
+    // --- Home / Discover ---
+
+    suspend fun getRealtimeChart(style: String = "all", limit: Int = 20): ChartResponse {
+        val url = "${config.baseUrl}/api/v5/chart/realtime/$style/?limit=$limit"
+        return get(url) { json.decodeFromString<ChartResponse>(it) }
+    }
+
+    suspend fun getEditorChoice(limit: Int = 10): EditorChoiceResponse {
+        val url = "${config.baseUrl}/api/v4/editor_choice/?limit=$limit"
+        return get(url) { json.decodeFromString<EditorChoiceResponse>(it) }
+    }
+
+    suspend fun getSectionPlaylists(sectionId: Int, limit: Int = 10): SectionPlaylistsResponse {
+        val url = "${config.baseUrl}/api/v4/playlist_section/$sectionId/playlists/?limit=$limit"
+        return get(url) { json.decodeFromString<SectionPlaylistsResponse>(it) }
+    }
+
+    suspend fun getPlaylistDetail(playlistId: Int): PlaylistDetailResponse {
+        val url = "${config.baseUrl}/api/v4/playlist/$playlistId/"
+        return get(url) { json.decodeFromString<PlaylistDetailResponse>(it) }
+    }
+
+    suspend fun getPlaylistSongs(playlistId: Int, limit: Int = 50, offset: Int = 0): PlaylistSongsResponse {
+        val url = "${config.baseUrl}/api/v4/playlist/$playlistId/songs/?limit=$limit&offset=$offset"
+        return get(url) { json.decodeFromString<PlaylistSongsResponse>(it) }
     }
 
     // --- Internal ---

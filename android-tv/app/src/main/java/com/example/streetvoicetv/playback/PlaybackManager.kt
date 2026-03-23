@@ -12,6 +12,7 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.session.MediaSession
+import com.example.streetvoicetv.data.api.StreetVoiceApi
 import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.domain.repository.StreetVoiceRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -32,6 +33,7 @@ import javax.inject.Singleton
 class PlaybackManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val repository: StreetVoiceRepository,
+    private val api: StreetVoiceApi,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var progressJob: Job? = null
@@ -138,6 +140,11 @@ class PlaybackManager @Inject constructor(
         player.setMediaSource(hlsSource)
         player.prepare()
         player.playWhenReady = true
+
+        // Report play event (fire-and-forget)
+        scope.launch {
+            try { api.reportPlay(song.id) } catch (_: Exception) { }
+        }
     }
 
     /** 次の曲を再生 */
