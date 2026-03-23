@@ -128,4 +128,4 @@ npm run search -- 五月天  # 搜尋
 
 ## 授權 License
 
-個人使用。Personal use only.
+[MIT](LICENSE)
