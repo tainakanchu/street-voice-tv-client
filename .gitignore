@@ -7,6 +7,12 @@ local.properties
 
 # Log/OS Files
 *.log
+.DS_Store
+
+# Research
+research/node_modules/
+research/dist/
+research/debug/
 
 # Android Studio generated files and folders
 captures/

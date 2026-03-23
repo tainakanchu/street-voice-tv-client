@@ -21,12 +21,14 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
+import com.example.streetvoicetv.data.auth.SessionManager
 import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.playback.PlaybackManager
 import com.example.streetvoicetv.ui.album.AlbumScreen
 import com.example.streetvoicetv.ui.artist.ArtistScreen
 import com.example.streetvoicetv.ui.components.NowPlayingBar
 import com.example.streetvoicetv.ui.home.HomeScreen
+import com.example.streetvoicetv.ui.login.LoginScreen
 import com.example.streetvoicetv.ui.player.PlayerScreen
 import com.example.streetvoicetv.ui.playlist.PlaylistScreen
 import com.example.streetvoicetv.ui.search.SearchScreen
@@ -37,14 +39,14 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
-    @Inject
-    lateinit var playbackManager: PlaybackManager
+    @Inject lateinit var playbackManager: PlaybackManager
+    @Inject lateinit var sessionManager: SessionManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             StreetVoiceTvTheme {
-                StreetVoiceTvApp(playbackManager)
+                StreetVoiceTvApp(playbackManager, sessionManager)
             }
         }
     }
@@ -52,13 +54,17 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun StreetVoiceTvApp(playbackManager: PlaybackManager) {
+fun StreetVoiceTvApp(playbackManager: PlaybackManager, sessionManager: SessionManager) {
     val navController = rememberNavController()
     val playbackState by playbackManager.state.collectAsState()
+    val isLoggedIn by sessionManager.isLoggedIn.collectAsState()
+    val username by sessionManager.username.collectAsState()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
-    val showNowPlaying = playbackState.hasMedia && currentRoute?.startsWith("player") != true
+    val showNowPlaying = playbackState.hasMedia
+        && currentRoute?.startsWith("player") != true
+        && currentRoute != "login"
 
     fun playSongInList(songs: List<Song>, selected: Song) {
         val index = songs.indexOfFirst { it.id == selected.id }.coerceAtLeast(0)
@@ -83,6 +89,18 @@ fun StreetVoiceTvApp(playbackManager: PlaybackManager) {
                         navController.navigate("playlist/${playlist.id}")
                     },
                     onSearchTap = { navController.navigate("search") },
+                    onLoginTap = { navController.navigate("login") },
+                    onLogoutTap = { sessionManager.clearSession() },
+                    isLoggedIn = isLoggedIn,
+                    username = username,
+                )
+            }
+
+            composable("login") {
+                LoginScreen(
+                    sessionManager = sessionManager,
+                    onLoginSuccess = { navController.popBackStack() },
+                    onBack = { navController.popBackStack() },
                 )
             }
 

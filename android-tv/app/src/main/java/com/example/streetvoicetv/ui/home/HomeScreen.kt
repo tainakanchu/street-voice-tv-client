@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -44,25 +45,61 @@ fun HomeScreen(
     onSongSelected: (Song, List<Song>) -> Unit,
     onPlaylistSelected: (Playlist) -> Unit,
     onSearchTap: () -> Unit,
+    onLoginTap: () -> Unit,
+    onLogoutTap: () -> Unit,
+    isLoggedIn: Boolean,
+    username: String?,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Header with search (individually padded)
-        Surface(
-            onClick = onSearchTap,
-            shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+        // Top bar: search + account
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(start = ScreenHPadding, end = ScreenHPadding, top = 32.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(
-                text = "Search songs & artists...",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            )
+            Surface(
+                onClick = onSearchTap,
+                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(
+                    text = "Search songs & artists...",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                )
+            }
+
+            if (isLoggedIn) {
+                Surface(
+                    onClick = onLogoutTap,
+                    shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                ) {
+                    Text(
+                        text = username ?: "Logged in",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    )
+                }
+            } else {
+                Surface(
+                    onClick = onLoginTap,
+                    shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                ) {
+                    Text(
+                        text = "Login",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    )
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))

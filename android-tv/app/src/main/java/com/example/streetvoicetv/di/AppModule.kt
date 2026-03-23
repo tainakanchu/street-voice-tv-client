@@ -3,6 +3,7 @@ package com.example.streetvoicetv.di
 import com.example.streetvoicetv.BuildConfig
 import com.example.streetvoicetv.data.api.ApiConfig
 import com.example.streetvoicetv.data.api.StreetVoiceApi
+import com.example.streetvoicetv.data.auth.SessionCookieInterceptor
 import com.example.streetvoicetv.data.repository.StreetVoiceRepositoryImpl
 import com.example.streetvoicetv.domain.repository.StreetVoiceRepository
 import dagger.Module
@@ -37,11 +38,14 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(): OkHttpClient {
+    fun provideOkHttpClient(
+        sessionCookieInterceptor: SessionCookieInterceptor,
+    ): OkHttpClient {
         val logging = HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BASIC
         }
         return OkHttpClient.Builder()
+            .addInterceptor(sessionCookieInterceptor)
             .addInterceptor(logging)
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)
