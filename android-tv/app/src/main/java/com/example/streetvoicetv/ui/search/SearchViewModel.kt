@@ -2,9 +2,11 @@ package com.example.streetvoicetv.ui.search
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.streetvoicetv.domain.model.Artist
 import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.domain.repository.StreetVoiceRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -33,20 +35,27 @@ class SearchViewModel @Inject constructor(
         )
 
         viewModelScope.launch {
-            repository.searchSongs(query)
-                .onSuccess { songs ->
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        songs = songs,
-                        error = null,
-                    )
-                }
-                .onFailure { error ->
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = error.message ?: "Search failed",
-                    )
-                }
+            val songsDeferred = async { repository.searchSongs(query) }
+            val artistsDeferred = async { repository.searchArtists(query) }
+
+            val songsResult = songsDeferred.await()
+            val artistsResult = artistsDeferred.await()
+
+            val songs = songsResult.getOrDefault(emptyList())
+            val artists = artistsResult.getOrDefault(emptyList())
+
+            val error = when {
+                songsResult.isFailure && artistsResult.isFailure ->
+                    songsResult.exceptionOrNull()?.message ?: "Search failed"
+                else -> null
+            }
+
+            _uiState.value = _uiState.value.copy(
+                isLoading = false,
+                songs = songs,
+                artists = artists,
+                error = error,
+            )
         }
     }
 
@@ -59,5 +68,9 @@ data class SearchUiState(
     val query: String = "",
     val isLoading: Boolean = false,
     val songs: List<Song> = emptyList(),
+    val artists: List<Artist> = emptyList(),
     val error: String? = null,
-)
+) {
+    val hasResults: Boolean get() = songs.isNotEmpty() || artists.isNotEmpty()
+    val isEmpty: Boolean get() = songs.isEmpty() && artists.isEmpty()
+}

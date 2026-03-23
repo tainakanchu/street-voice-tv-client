@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.CircularProgressIndicator
@@ -24,19 +26,20 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.tv.material3.Button
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.example.streetvoicetv.domain.model.Artist
 import com.example.streetvoicetv.domain.model.Song
+import com.example.streetvoicetv.ui.components.ArtistListItem
 import com.example.streetvoicetv.ui.components.SongListItem
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun SearchScreen(
     onSongSelected: (Song) -> Unit,
+    onArtistSelected: (Artist) -> Unit,
     viewModel: SearchViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -66,7 +69,7 @@ fun SearchScreen(
                 modifier = Modifier.weight(1f),
                 placeholder = {
                     androidx.compose.material3.Text(
-                        text = "Search songs...",
+                        text = "Search songs & artists...",
                         color = Color.Gray,
                     )
                 },
@@ -112,29 +115,51 @@ fun SearchScreen(
                 )
             }
 
-            uiState.songs.isEmpty() && uiState.query.isNotBlank() -> {
+            uiState.isEmpty && uiState.query.isNotBlank() -> {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = "No songs found for \"${uiState.query}\"",
+                        text = "No results for \"${uiState.query}\"",
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
 
-            uiState.songs.isNotEmpty() -> {
+            uiState.hasResults -> {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    items(uiState.songs, key = { it.id }) { song ->
-                        SongListItem(
-                            song = song,
-                            onClick = { onSongSelected(song) },
-                        )
+                    // Artists section
+                    if (uiState.artists.isNotEmpty()) {
+                        item {
+                            SectionHeader("Artists")
+                        }
+                        items(uiState.artists, key = { "artist_${it.id}" }) { artist ->
+                            ArtistListItem(
+                                artist = artist,
+                                onClick = { onArtistSelected(artist) },
+                            )
+                        }
+                        item {
+                            Spacer(modifier = Modifier.height(12.dp))
+                        }
+                    }
+
+                    // Songs section
+                    if (uiState.songs.isNotEmpty()) {
+                        item {
+                            SectionHeader("Songs")
+                        }
+                        items(uiState.songs, key = { "song_${it.id}" }) { song ->
+                            SongListItem(
+                                song = song,
+                                onClick = { onSongSelected(song) },
+                            )
+                        }
                     }
                 }
             }
@@ -153,6 +178,17 @@ fun SearchScreen(
             }
         }
     }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun SectionHeader(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp),
+    )
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)

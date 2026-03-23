@@ -14,6 +14,8 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
+import com.example.streetvoicetv.ui.album.AlbumScreen
+import com.example.streetvoicetv.ui.artist.ArtistScreen
 import com.example.streetvoicetv.ui.player.PlayerScreen
 import com.example.streetvoicetv.ui.search.SearchScreen
 import com.example.streetvoicetv.ui.theme.StreetVoiceTvTheme
@@ -48,6 +50,9 @@ fun StreetVoiceTvApp() {
                 onSongSelected = { song ->
                     navController.navigate("player/${song.id}")
                 },
+                onArtistSelected = { artist ->
+                    navController.navigate("artist/${artist.username}")
+                },
             )
         }
 
@@ -58,6 +63,37 @@ fun StreetVoiceTvApp() {
             ),
         ) {
             PlayerScreen(
+                onBack = { navController.popBackStack() },
+            )
+        }
+
+        composable(
+            route = "artist/{username}",
+            arguments = listOf(
+                navArgument("username") { type = NavType.StringType },
+            ),
+        ) {
+            ArtistScreen(
+                onSongSelected = { song ->
+                    navController.navigate("player/${song.id}")
+                },
+                onAlbumSelected = { album ->
+                    navController.navigate("album/${album.id}")
+                },
+                onBack = { navController.popBackStack() },
+            )
+        }
+
+        composable(
+            route = "album/{albumId}",
+            arguments = listOf(
+                navArgument("albumId") { type = NavType.IntType },
+            ),
+        ) {
+            AlbumScreen(
+                onSongSelected = { song ->
+                    navController.navigate("player/${song.id}")
+                },
                 onBack = { navController.popBackStack() },
             )
         }
