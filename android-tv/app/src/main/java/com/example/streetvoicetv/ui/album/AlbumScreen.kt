@@ -36,7 +36,7 @@ import com.example.streetvoicetv.ui.components.SongListItem
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun AlbumScreen(
-    onSongSelected: (Song) -> Unit,
+    onSongSelected: (Song, List<Song>) -> Unit,
     onBack: () -> Unit,
     viewModel: AlbumViewModel = hiltViewModel(),
 ) {
@@ -135,7 +135,7 @@ fun AlbumScreen(
                         items(uiState.songs, key = { it.id }) { song ->
                             SongListItem(
                                 song = song,
-                                onClick = { onSongSelected(song) },
+                                onClick = { onSongSelected(song, uiState.songs) },
                             )
                         }
                     }

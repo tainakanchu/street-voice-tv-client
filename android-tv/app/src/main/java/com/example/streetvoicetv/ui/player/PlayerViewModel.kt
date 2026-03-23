@@ -3,8 +3,9 @@ package com.example.streetvoicetv.ui.player
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.domain.repository.StreetVoiceRepository
+import com.example.streetvoicetv.playback.PlaybackManager
+import com.example.streetvoicetv.playback.PlaybackState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,72 +16,79 @@ import javax.inject.Inject
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
     private val repository: StreetVoiceRepository,
+    private val playbackManager: PlaybackManager,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
     private val songId: Int = savedStateHandle.get<Int>("songId") ?: -1
 
-    private val _uiState = MutableStateFlow(PlayerUiState())
-    val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
+    private val _loadingState = MutableStateFlow(PlayerLoadingState())
+    val loadingState: StateFlow<PlayerLoadingState> = _loadingState.asStateFlow()
+
+    val playbackState: StateFlow<PlaybackState> = playbackManager.state
 
     init {
         if (songId > 0) {
-            loadSongAndStream(songId)
+            val current = playbackManager.state.value
+            if (current.song?.id == songId && current.hasMedia) {
+                // 既に同じ曲を再生中ならロードし直さない
+                _loadingState.value = PlayerLoadingState(isLoaded = true)
+            } else {
+                loadSongAndPlay(songId)
+            }
         } else {
-            _uiState.value = PlayerUiState(error = "Invalid song ID")
+            _loadingState.value = PlayerLoadingState(error = "Invalid song ID")
         }
     }
 
-    private fun loadSongAndStream(songId: Int) {
-        _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+    private fun loadSongAndPlay(songId: Int) {
+        _loadingState.value = PlayerLoadingState(isLoading = true)
 
         viewModelScope.launch {
-            // Fetch song details
             val songResult = repository.getSongDetail(songId)
-            songResult
-                .onSuccess { song ->
-                    _uiState.value = _uiState.value.copy(song = song)
-                }
-                .onFailure { error ->
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = "Failed to load song details: ${error.message}",
-                    )
-                    return@launch
-                }
+            val song = songResult.getOrElse { error ->
+                _loadingState.value = PlayerLoadingState(
+                    error = "Failed to load song: ${error.message}",
+                )
+                return@launch
+            }
 
-            // Fetch stream URL
             val streamResult = repository.getStreamUrl(songId)
-            streamResult
-                .onSuccess { stream ->
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        streamUrl = stream.hlsUrl,
-                    )
-                }
-                .onFailure { error ->
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = "Failed to load stream: ${error.message}",
-                    )
-                }
+            val stream = streamResult.getOrElse { error ->
+                _loadingState.value = PlayerLoadingState(
+                    error = "Failed to load stream: ${error.message}",
+                )
+                return@launch
+            }
+
+            playbackManager.playCurrentInQueue(song, stream.hlsUrl)
+            _loadingState.value = PlayerLoadingState(isLoaded = true)
         }
+    }
+
+    fun togglePlayPause() {
+        playbackManager.togglePlayPause()
+    }
+
+    fun skipNext() {
+        playbackManager.playNext()
+    }
+
+    fun skipPrevious() {
+        playbackManager.playPrevious()
+    }
+
+    fun seekTo(positionMs: Long) {
+        playbackManager.seekTo(positionMs)
     }
 
     fun retry() {
-        if (songId > 0) {
-            loadSongAndStream(songId)
-        }
-    }
-
-    fun onPlaybackError(message: String) {
-        _uiState.value = _uiState.value.copy(error = "Playback error: $message")
+        if (songId > 0) loadSongAndPlay(songId)
     }
 }
 
-data class PlayerUiState(
+data class PlayerLoadingState(
     val isLoading: Boolean = false,
-    val song: Song? = null,
-    val streamUrl: String? = null,
+    val isLoaded: Boolean = false,
     val error: String? = null,
 )

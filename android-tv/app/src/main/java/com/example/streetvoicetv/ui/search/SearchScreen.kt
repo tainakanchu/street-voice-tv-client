@@ -38,7 +38,7 @@ import com.example.streetvoicetv.ui.components.SongListItem
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun SearchScreen(
-    onSongSelected: (Song) -> Unit,
+    onSongSelected: (Song, List<Song>) -> Unit,
     onArtistSelected: (Artist) -> Unit,
     viewModel: SearchViewModel = hiltViewModel(),
 ) {
@@ -157,7 +157,7 @@ fun SearchScreen(
                         items(uiState.songs, key = { "song_${it.id}" }) { song ->
                             SongListItem(
                                 song = song,
-                                onClick = { onSongSelected(song) },
+                                onClick = { onSongSelected(song, uiState.songs) },
                             )
                         }
                     }
