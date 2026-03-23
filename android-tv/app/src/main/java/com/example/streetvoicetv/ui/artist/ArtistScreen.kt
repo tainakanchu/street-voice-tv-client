@@ -3,6 +3,7 @@ package com.example.streetvoicetv.ui.artist
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -76,14 +77,12 @@ fun ArtistScreen(
         uiState.artist != null -> {
             val artist = uiState.artist!!
 
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(24.dp),
-            ) {
+            Column(modifier = Modifier.fillMaxSize()) {
                 // Artist header
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 48.dp, end = 48.dp, top = 32.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     AsyncImage(
@@ -137,7 +136,10 @@ fun ArtistScreen(
                 val tabs = ArtistTab.entries.toList()
                 val selectedIndex = tabs.indexOf(uiState.selectedTab)
 
-                TabRow(selectedTabIndex = selectedIndex) {
+                TabRow(
+                    selectedTabIndex = selectedIndex,
+                    modifier = Modifier.padding(horizontal = 48.dp),
+                ) {
                     tabs.forEachIndexed { index, tab ->
                         Tab(
                             selected = index == selectedIndex,
@@ -170,6 +172,7 @@ fun ArtistScreen(
                             LazyColumn(
                                 modifier = Modifier.fillMaxSize(),
                                 verticalArrangement = Arrangement.spacedBy(4.dp),
+                                contentPadding = PaddingValues(horizontal = 48.dp, vertical = 8.dp),
                             ) {
                                 items(uiState.songs, key = { it.id }) { song ->
                                     SongListItem(
@@ -193,6 +196,7 @@ fun ArtistScreen(
                             LazyColumn(
                                 modifier = Modifier.fillMaxSize(),
                                 verticalArrangement = Arrangement.spacedBy(4.dp),
+                                contentPadding = PaddingValues(horizontal = 48.dp, vertical = 8.dp),
                             ) {
                                 items(uiState.albums, key = { it.id }) { album ->
                                     AlbumListItem(

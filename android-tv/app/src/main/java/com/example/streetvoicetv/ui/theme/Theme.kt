@@ -8,23 +8,31 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.darkColorScheme
 
-// StreetVoice brand-inspired colors
-val SvOrange = Color(0xFFFF6B35)
+// StreetVoice brand colors based on #F5565C
+val SvRed = Color(0xFFF5565C)
+val SvRedLight = Color(0xFFFF8A8E)
+val SvRedDark = Color(0xFFBF2D33)
 val SvDarkBackground = Color(0xFF121212)
-val SvSurfaceDark = Color(0xFF1E1E1E)
-val SvSurfaceVariant = Color(0xFF2A2A2A)
-val SvOnSurface = Color(0xFFE0E0E0)
-val SvOnSurfaceVariant = Color(0xFF9E9E9E)
+val SvSurfaceDark = Color(0xFF1C1C1C)
+val SvSurfaceVariant = Color(0xFF2A2222)
+val SvOnSurface = Color(0xFFECE0E0)
+val SvOnSurfaceVariant = Color(0xFFA09696)
+val SvError = Color(0xFFFF6B6B)
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 private val DarkColorScheme = darkColorScheme(
-    primary = SvOrange,
+    primary = SvRed,
     onPrimary = Color.White,
+    secondary = SvRedLight,
+    onSecondary = Color.Black,
     surface = SvSurfaceDark,
     onSurface = SvOnSurface,
+    surfaceVariant = SvSurfaceVariant,
     onSurfaceVariant = SvOnSurfaceVariant,
     background = SvDarkBackground,
     onBackground = SvOnSurface,
+    error = SvError,
+    onError = Color.White,
 )
 
 @OptIn(ExperimentalTvMaterial3Api::class)

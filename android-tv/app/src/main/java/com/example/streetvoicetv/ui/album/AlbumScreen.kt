@@ -3,6 +3,7 @@ package com.example.streetvoicetv.ui.album
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -71,14 +72,12 @@ fun AlbumScreen(
         uiState.album != null -> {
             val album = uiState.album!!
 
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(24.dp),
-            ) {
+            Column(modifier = Modifier.fillMaxSize()) {
                 // Album header
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 48.dp, end = 48.dp, top = 32.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     AsyncImage(
@@ -131,6 +130,7 @@ fun AlbumScreen(
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
+                        contentPadding = PaddingValues(horizontal = 48.dp, vertical = 8.dp),
                     ) {
                         items(uiState.songs, key = { it.id }) { song ->
                             SongListItem(
