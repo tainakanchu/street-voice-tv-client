@@ -5,7 +5,7 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
     android-nixpkgs = {
-      url = "github:nickcao/android-nixpkgs/main";
+      url = "github:tadfisher/android-nixpkgs/main";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
