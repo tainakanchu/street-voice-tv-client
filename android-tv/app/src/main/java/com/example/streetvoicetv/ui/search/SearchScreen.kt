@@ -3,6 +3,8 @@ package com.example.streetvoicetv.ui.search
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -27,25 +29,32 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.tv.material3.Button
+import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.example.streetvoicetv.domain.model.Artist
+import com.example.streetvoicetv.domain.model.Playlist
 import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.ui.components.ArtistListItem
+import com.example.streetvoicetv.ui.components.PlaylistListItem
 import com.example.streetvoicetv.ui.components.SongListItem
 
 private val HPad = 48.dp
 
-@OptIn(ExperimentalTvMaterial3Api::class)
+@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SearchScreen(
     onSongSelected: (Song, List<Song>) -> Unit,
     onArtistSelected: (Artist) -> Unit,
+    onPlaylistSelected: (Playlist) -> Unit,
     viewModel: SearchViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val searchHistory by viewModel.history.collectAsState()
 
     Column(modifier = Modifier.fillMaxSize()) {
         // Title (individually padded)
@@ -70,7 +79,7 @@ fun SearchScreen(
                 onValueChange = viewModel::onQueryChange,
                 modifier = Modifier.weight(1f),
                 placeholder = {
-                    androidx.compose.material3.Text("Search songs & artists...", color = Color.Gray)
+                    androidx.compose.material3.Text("Search songs, artists & playlists...", color = Color.Gray)
                 },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
@@ -129,6 +138,14 @@ fun SearchScreen(
                         item { Spacer(modifier = Modifier.height(12.dp)) }
                     }
 
+                    if (uiState.playlists.isNotEmpty()) {
+                        item { SectionHeader("Playlists") }
+                        items(uiState.playlists, key = { "playlist_${it.id}" }) { playlist ->
+                            PlaylistListItem(playlist = playlist, onClick = { onPlaylistSelected(playlist) })
+                        }
+                        item { Spacer(modifier = Modifier.height(12.dp)) }
+                    }
+
                     if (uiState.songs.isNotEmpty()) {
                         item { SectionHeader("Songs") }
                         items(uiState.songs, key = { "song_${it.id}" }) { song ->
@@ -139,8 +156,40 @@ fun SearchScreen(
             }
 
             else -> {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Search for music on StreetVoice", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (searchHistory.isNotEmpty()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = HPad),
+                    ) {
+                        Text(
+                            text = "Recent Searches",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(bottom = 12.dp),
+                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            searchHistory.forEach { query ->
+                                Surface(
+                                    onClick = { viewModel.selectHistory(query) },
+                                    shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(20.dp)),
+                                ) {
+                                    Text(
+                                        text = query,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("Search for music on StreetVoice", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
         }

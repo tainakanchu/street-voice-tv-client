@@ -40,6 +40,12 @@ class StreetVoiceRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun searchPlaylists(query: String, limit: Int, offset: Int): Result<List<Playlist>> {
+        return runCatching {
+            api.searchPlaylists(query, limit, offset).results.map { it.toDomain() }
+        }
+    }
+
     // --- Song ---
 
     override suspend fun getSongDetail(songId: Int): Result<Song> {
@@ -52,6 +58,14 @@ class StreetVoiceRepositoryImpl @Inject constructor(
         return runCatching {
             PlayableStream(songId = songId, hlsUrl = api.getStreamUrl(songId).file)
         }
+    }
+
+    override suspend fun likeSong(songId: Int): Result<Unit> {
+        return runCatching { api.likeSong(songId) }
+    }
+
+    override suspend fun unlikeSong(songId: Int): Result<Unit> {
+        return runCatching { api.unlikeSong(songId) }
     }
 
     // --- Artist ---
@@ -71,6 +85,18 @@ class StreetVoiceRepositoryImpl @Inject constructor(
     override suspend fun getArtistAlbums(username: String, limit: Int, offset: Int): Result<List<Album>> {
         return runCatching {
             api.getUserAlbums(username, limit, offset).results.map { it.toDomain() }
+        }
+    }
+
+    override suspend fun getArtistPlaylists(username: String, limit: Int, offset: Int): Result<List<Playlist>> {
+        return runCatching {
+            api.getUserPlaylists(username, limit, offset).results.map { it.toDomain() }
+        }
+    }
+
+    override suspend fun getLikedSongs(username: String, limit: Int, offset: Int): Result<List<Song>> {
+        return runCatching {
+            api.getUserLikedSongs(username, limit, offset).results.map { it.contentObject.toDomain() }
         }
     }
 
@@ -152,13 +178,14 @@ private fun SongDetailResponse.toDomain(): Song = Song(
     albumName = album?.name,
     albumImageUrl = album?.image,
     artistProfileImageUrl = user.profile?.image,
+    isLiked = isLike,
 )
 
 private fun UserSearchResult.toDomain(): Artist = Artist(
     id = id,
     username = username,
-    displayName = nickname ?: username,
-    profileImageUrl = profileImage,
+    displayName = profile?.nickname ?: username,
+    profileImageUrl = profile?.image ?: profileImage,
     coverImageUrl = coverImage,
     introduction = introduction,
     followersCount = followersCount,

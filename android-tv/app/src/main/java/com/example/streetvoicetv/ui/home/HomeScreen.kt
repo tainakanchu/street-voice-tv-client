@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -46,9 +47,9 @@ fun HomeScreen(
     onPlaylistSelected: (Playlist) -> Unit,
     onSearchTap: () -> Unit,
     onLoginTap: () -> Unit,
-    onLogoutTap: () -> Unit,
+    onMyPageTap: () -> Unit,
     isLoggedIn: Boolean,
-    username: String?,
+    profileImageUrl: String?,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -77,14 +78,17 @@ fun HomeScreen(
 
             if (isLoggedIn) {
                 Surface(
-                    onClick = onLogoutTap,
-                    shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                    onClick = onMyPageTap,
+                    shape = ClickableSurfaceDefaults.shape(CircleShape),
+                    modifier = Modifier.size(44.dp),
                 ) {
-                    Text(
-                        text = username ?: "Logged in",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    AsyncImage(
+                        model = profileImageUrl,
+                        contentDescription = "My Page",
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(CircleShape),
+                        contentScale = ContentScale.Crop,
                     )
                 }
             } else {
@@ -131,6 +135,16 @@ fun HomeScreen(
                             title = "Editor's Choice",
                             songs = uiState.editorPicks,
                             onSongSelected = onSongSelected,
+                        )
+                    }
+                }
+
+                if (uiState.myPlaylists.isNotEmpty()) {
+                    item {
+                        PlaylistSection(
+                            title = "My Playlists",
+                            playlists = uiState.myPlaylists,
+                            onPlaylistSelected = onPlaylistSelected,
                         )
                     }
                 }
@@ -215,14 +229,12 @@ private fun SongCard(
                 Text(
                     text = song.name,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
                     text = song.artistName,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -284,7 +296,6 @@ private fun PlaylistCard(
                 Text(
                     text = playlist.name,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -292,7 +303,6 @@ private fun PlaylistCard(
                     Text(
                         text = playlist.curatorName,
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )

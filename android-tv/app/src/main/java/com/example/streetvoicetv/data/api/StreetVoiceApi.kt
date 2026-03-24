@@ -5,6 +5,7 @@ import com.example.streetvoicetv.data.model.AlbumListResponse
 import com.example.streetvoicetv.data.model.AlbumSongsResponse
 import com.example.streetvoicetv.data.model.ChartResponse
 import com.example.streetvoicetv.data.model.EditorChoiceResponse
+import com.example.streetvoicetv.data.model.LikedSongsResponse
 import com.example.streetvoicetv.data.model.PlaylistDetailResponse
 import com.example.streetvoicetv.data.model.PlaylistSongsResponse
 import com.example.streetvoicetv.data.model.SearchResponse
@@ -40,6 +41,11 @@ class StreetVoiceApi @Inject constructor(
     suspend fun searchUsers(query: String, limit: Int, offset: Int): UserSearchResponse {
         val url = "${config.baseUrl}/api/v4/search/?q=$query&type=user&limit=$limit&offset=$offset"
         return get(url) { json.decodeFromString<UserSearchResponse>(it) }
+    }
+
+    suspend fun searchPlaylists(query: String, limit: Int, offset: Int): SectionPlaylistsResponse {
+        val url = "${config.baseUrl}/api/v4/search/?q=$query&type=playlist&limit=$limit&offset=$offset"
+        return get(url) { json.decodeFromString<SectionPlaylistsResponse>(it) }
     }
 
     // --- Song ---
@@ -81,6 +87,16 @@ class StreetVoiceApi @Inject constructor(
         return get(url) { json.decodeFromString<AlbumListResponse>(it) }
     }
 
+    suspend fun getUserPlaylists(username: String, limit: Int = 20, offset: Int = 0): SectionPlaylistsResponse {
+        val url = "${config.baseUrl}/api/v4/user/$username/playlists/?limit=$limit&offset=$offset"
+        return get(url) { json.decodeFromString<SectionPlaylistsResponse>(it) }
+    }
+
+    suspend fun getUserLikedSongs(username: String, limit: Int = 50, offset: Int = 0): LikedSongsResponse {
+        val url = "${config.baseUrl}/api/v4/user/$username/likes/?limit=$limit&offset=$offset"
+        return get(url) { json.decodeFromString<LikedSongsResponse>(it) }
+    }
+
     // --- Album ---
 
     suspend fun getAlbumDetail(albumId: Int): AlbumDetailResponse {
@@ -101,6 +117,35 @@ class StreetVoiceApi @Inject constructor(
         val request = Request.Builder()
             .url(url)
             .post(emptyBody)
+            .addHeader("Accept", "application/json")
+            .addHeader("User-Agent", "StreetVoiceTV/1.0")
+            .addHeader("Referer", "${config.baseUrl}/")
+            .addHeader("X-Requested-With", "XMLHttpRequest")
+            .build()
+        executeRequest(request) { it }
+    }
+
+    // --- Like ---
+
+    suspend fun likeSong(songId: Int) {
+        val url = "${config.baseUrl}/api/v4/song/$songId/likes/"
+        val emptyBody = "{}".toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url(url)
+            .post(emptyBody)
+            .addHeader("Accept", "application/json")
+            .addHeader("User-Agent", "StreetVoiceTV/1.0")
+            .addHeader("Referer", "${config.baseUrl}/")
+            .addHeader("X-Requested-With", "XMLHttpRequest")
+            .build()
+        executeRequest(request) { it }
+    }
+
+    suspend fun unlikeSong(songId: Int) {
+        val url = "${config.baseUrl}/api/v4/song/$songId/likes/"
+        val request = Request.Builder()
+            .url(url)
+            .delete()
             .addHeader("Accept", "application/json")
             .addHeader("User-Agent", "StreetVoiceTV/1.0")
             .addHeader("Referer", "${config.baseUrl}/")
