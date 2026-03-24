@@ -17,11 +17,17 @@ data class UserSearchResponse(
 data class UserSearchResult(
     val id: Int,
     val username: String,
-    val nickname: String? = null,
+    val profile: UserSearchProfile? = null,
     @SerialName("profile_image") val profileImage: String? = null,
     @SerialName("cover_image") val coverImage: String? = null,
     val introduction: String? = null,
     @SerialName("followers_count") val followersCount: Int = 0,
     @SerialName("following_count") val followingCount: Int = 0,
     @SerialName("songs_count") val songsCount: Int = 0,
+)
+
+@Serializable
+data class UserSearchProfile(
+    val nickname: String? = null,
+    val image: String? = null,
 )

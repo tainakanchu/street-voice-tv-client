@@ -46,8 +46,9 @@ fun LoginScreen(
             wv.goBack()
         } else {
             // WebView の履歴がなくなったら cookie チェックして終了
-            if (tryExtractSession(sessionManager)) {
-                onLoginSuccess()
+            if (saveCookieSession(sessionManager)) {
+                // JS でユーザー名を取得してからコールバック
+                fetchUsernameViaJs(wv, sessionManager, onLoginSuccess)
             } else {
                 onBack()
             }
@@ -94,8 +95,8 @@ fun LoginScreen(
                             isLoading = false
                             // ログイン後にページ遷移した場合は自動検知
                             if (url != null && !url.contains("/accounts/login")) {
-                                if (tryExtractSession(sessionManager)) {
-                                    onLoginSuccess()
+                                if (saveCookieSession(sessionManager)) {
+                                    fetchUsernameViaJs(view, sessionManager, onLoginSuccess)
                                 }
                             }
                         }
@@ -110,8 +111,8 @@ fun LoginScreen(
     }
 }
 
-/** Cookie から session を取得して保存。成功したら true */
-private fun tryExtractSession(sessionManager: SessionManager): Boolean {
+/** Cookie から session を取得して保存（username は後で JS から取得）。成功したら true */
+private fun saveCookieSession(sessionManager: SessionManager): Boolean {
     val cookies = CookieManager.getInstance().getCookie(BASE_URL) ?: return false
 
     val cookieMap = cookies.split(";")
@@ -122,14 +123,49 @@ private fun tryExtractSession(sessionManager: SessionManager): Boolean {
             key.trim() to value.trim()
         }
 
-    // StreetVoice の session cookie は "session" という名前
     val sessionId = cookieMap["session"] ?: cookieMap["sessionid"] ?: return false
     val csrfToken = cookieMap["csrf-token"] ?: ""
 
     sessionManager.saveSession(
         sessionId = sessionId,
         csrfToken = csrfToken,
-        username = null,
+        username = sessionManager.username.value, // 既存のユーザー名を維持
     )
     return true
+}
+
+/** WebView 内の JS で /api/v4/user/me/ を叩いてユーザー名を取得 */
+private fun fetchUsernameViaJs(webView: WebView?, sessionManager: SessionManager, onDone: () -> Unit) {
+    if (webView == null) {
+        onDone()
+        return
+    }
+
+    val js = """
+        (function() {
+            try {
+                var xhr = new XMLHttpRequest();
+                xhr.open('GET', '/api/v4/user/me/', false);
+                xhr.setRequestHeader('Accept', 'application/json');
+                xhr.send();
+                if (xhr.status === 200) {
+                    var data = JSON.parse(xhr.responseText);
+                    return data.username || '';
+                }
+            } catch(e) {}
+            return '';
+        })();
+    """.trimIndent()
+
+    webView.evaluateJavascript(js) { result ->
+        val username = result?.trim('"')?.takeIf { it.isNotBlank() }
+        if (username != null) {
+            sessionManager.saveSession(
+                sessionId = sessionManager.getSessionId() ?: "",
+                csrfToken = sessionManager.getCsrfToken() ?: "",
+                username = username,
+            )
+        }
+        onDone()
+    }
 }
