@@ -3,7 +3,6 @@ package com.example.streetvoicetv.ui.player
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -41,19 +41,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.material3.Button
+import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 
@@ -61,10 +58,13 @@ import coil.compose.AsyncImage
 @Composable
 fun PlayerScreen(
     onBack: () -> Unit,
+    onArtistSelected: (String) -> Unit = {},
     viewModel: PlayerViewModel = hiltViewModel(),
 ) {
     val loadingState by viewModel.loadingState.collectAsState()
     val playbackState by viewModel.playbackState.collectAsState()
+    val isLiked by viewModel.isLiked.collectAsState()
+    val isLoggedIn by viewModel.isLoggedIn.collectAsState()
 
     // Keep screen on while playing
     KeepScreenOn()
@@ -100,18 +100,7 @@ fun PlayerScreen(
             val song = playbackState.song!!
 
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .onKeyEvent { keyEvent ->
-                        if (keyEvent.type == KeyEventType.KeyDown) {
-                            when (keyEvent.key) {
-                                Key.DirectionCenter, Key.Enter -> { viewModel.togglePlayPause(); true }
-                                Key.Back -> { onBack(); true }
-                                else -> false
-                            }
-                        } else false
-                    }
-                    .focusable(),
+                modifier = Modifier.fillMaxSize(),
             ) {
                 // Background: blurred album art
                 if (song.imageUrl != null) {
@@ -193,11 +182,21 @@ fun PlayerScreen(
                             overflow = TextOverflow.Ellipsis,
                         )
                         Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = song.artistName,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = Color.White.copy(alpha = 0.7f),
-                        )
+                        Surface(
+                            onClick = { onArtistSelected(song.artistUsername) },
+                            shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(4.dp)),
+                            colors = ClickableSurfaceDefaults.colors(
+                                containerColor = Color.Transparent,
+                                focusedContainerColor = Color.White.copy(alpha = 0.15f),
+                            ),
+                        ) {
+                            Text(
+                                text = song.artistName,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = Color.White.copy(alpha = 0.7f),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            )
+                        }
                         if (song.albumName != null) {
                             Text(
                                 text = song.albumName,
@@ -267,6 +266,15 @@ fun PlayerScreen(
                                 enabled = playbackState.hasNext,
                             ) {
                                 Icon(Icons.Default.SkipNext, "Next")
+                            }
+                            if (isLoggedIn) {
+                                Button(onClick = { viewModel.toggleLike() }) {
+                                    Icon(
+                                        if (isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                        if (isLiked) "Unlike" else "Like",
+                                        tint = if (isLiked) MaterialTheme.colorScheme.primary else Color.White,
+                                    )
+                                }
                             }
                         }
                         if (playbackState.queueSize > 1) {

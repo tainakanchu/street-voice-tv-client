@@ -3,6 +3,7 @@ package com.example.streetvoicetv.ui.player
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.streetvoicetv.data.auth.SessionManager
 import com.example.streetvoicetv.domain.repository.StreetVoiceRepository
 import com.example.streetvoicetv.playback.PlaybackManager
 import com.example.streetvoicetv.playback.PlaybackState
@@ -17,6 +18,7 @@ import javax.inject.Inject
 class PlayerViewModel @Inject constructor(
     private val repository: StreetVoiceRepository,
     private val playbackManager: PlaybackManager,
+    private val sessionManager: SessionManager,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -24,6 +26,11 @@ class PlayerViewModel @Inject constructor(
 
     private val _loadingState = MutableStateFlow(PlayerLoadingState())
     val loadingState: StateFlow<PlayerLoadingState> = _loadingState.asStateFlow()
+
+    private val _isLiked = MutableStateFlow(false)
+    val isLiked: StateFlow<Boolean> = _isLiked.asStateFlow()
+
+    val isLoggedIn: StateFlow<Boolean> = sessionManager.isLoggedIn
 
     val playbackState: StateFlow<PlaybackState> = playbackManager.state
 
@@ -61,6 +68,7 @@ class PlayerViewModel @Inject constructor(
                 return@launch
             }
 
+            _isLiked.value = song.isLiked
             playbackManager.playCurrentInQueue(song, stream.hlsUrl)
             _loadingState.value = PlayerLoadingState(isLoaded = true)
         }
@@ -80,6 +88,17 @@ class PlayerViewModel @Inject constructor(
 
     fun seekTo(positionMs: Long) {
         playbackManager.seekTo(positionMs)
+    }
+
+    fun toggleLike() {
+        val currentSongId = playbackManager.state.value.song?.id ?: return
+        viewModelScope.launch {
+            if (_isLiked.value) {
+                repository.unlikeSong(currentSongId).onSuccess { _isLiked.value = false }
+            } else {
+                repository.likeSong(currentSongId).onSuccess { _isLiked.value = true }
+            }
+        }
     }
 
     fun retry() {

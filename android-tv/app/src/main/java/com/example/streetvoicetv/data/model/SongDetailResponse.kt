@@ -21,6 +21,7 @@ data class SongDetailResponse(
     @SerialName("created_at") val createdAt: String? = null,
     val user: SongDetailUser,
     val album: SongDetailAlbum? = null,
+    @SerialName("is_like") val isLike: Boolean = false,
 )
 
 @Serializable

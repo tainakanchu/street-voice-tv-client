@@ -19,6 +19,7 @@ data class Song(
     val albumName: String? = null,
     val albumImageUrl: String? = null,
     val artistProfileImageUrl: String? = null,
+    val isLiked: Boolean = false,
 ) {
     val formattedDuration: String
         get() {

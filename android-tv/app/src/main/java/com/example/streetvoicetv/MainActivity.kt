@@ -29,6 +29,7 @@ import com.example.streetvoicetv.ui.artist.ArtistScreen
 import com.example.streetvoicetv.ui.components.NowPlayingBar
 import com.example.streetvoicetv.ui.home.HomeScreen
 import com.example.streetvoicetv.ui.login.LoginScreen
+import com.example.streetvoicetv.ui.mypage.MyPageScreen
 import com.example.streetvoicetv.ui.player.PlayerScreen
 import com.example.streetvoicetv.ui.playlist.PlaylistScreen
 import com.example.streetvoicetv.ui.search.SearchScreen
@@ -58,7 +59,7 @@ fun StreetVoiceTvApp(playbackManager: PlaybackManager, sessionManager: SessionMa
     val navController = rememberNavController()
     val playbackState by playbackManager.state.collectAsState()
     val isLoggedIn by sessionManager.isLoggedIn.collectAsState()
-    val username by sessionManager.username.collectAsState()
+    val profileImageUrl by sessionManager.profileImageUrl.collectAsState()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
@@ -90,9 +91,9 @@ fun StreetVoiceTvApp(playbackManager: PlaybackManager, sessionManager: SessionMa
                     },
                     onSearchTap = { navController.navigate("search") },
                     onLoginTap = { navController.navigate("login") },
-                    onLogoutTap = { sessionManager.clearSession() },
+                    onMyPageTap = { navController.navigate("mypage") },
                     isLoggedIn = isLoggedIn,
-                    username = username,
+                    profileImageUrl = profileImageUrl,
                 )
             }
 
@@ -110,6 +111,9 @@ fun StreetVoiceTvApp(playbackManager: PlaybackManager, sessionManager: SessionMa
                     onArtistSelected = { artist ->
                         navController.navigate("artist/${artist.username}")
                     },
+                    onPlaylistSelected = { playlist ->
+                        navController.navigate("playlist/${playlist.id}")
+                    },
                 )
             }
 
@@ -117,7 +121,12 @@ fun StreetVoiceTvApp(playbackManager: PlaybackManager, sessionManager: SessionMa
                 route = "player/{songId}",
                 arguments = listOf(navArgument("songId") { type = NavType.IntType }),
             ) {
-                PlayerScreen(onBack = { navController.popBackStack() })
+                PlayerScreen(
+                    onBack = { navController.popBackStack() },
+                    onArtistSelected = { username ->
+                        navController.navigate("artist/$username")
+                    },
+                )
             }
 
             composable(
@@ -137,6 +146,17 @@ fun StreetVoiceTvApp(playbackManager: PlaybackManager, sessionManager: SessionMa
             ) {
                 AlbumScreen(
                     onSongSelected = { song, allSongs -> playSongInList(allSongs, song) },
+                    onBack = { navController.popBackStack() },
+                )
+            }
+
+            composable("mypage") {
+                MyPageScreen(
+                    onSongSelected = { song, allSongs -> playSongInList(allSongs, song) },
+                    onPlaylistSelected = { playlist ->
+                        navController.navigate("playlist/${playlist.id}")
+                    },
+                    onLoggedOut = { navController.popBackStack("home", inclusive = false) },
                     onBack = { navController.popBackStack() },
                 )
             }
