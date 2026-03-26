@@ -66,8 +66,6 @@ android {
     lint {
         abortOnError = false
         checkReleaseBuilds = false
-        // AGP 8.x + Kotlin 2.x の既知バグで lint がクラッシュするため無効化
-        disable += "NullSafeMutableLiveData"
     }
 }
 

@@ -28,4 +28,6 @@ jobs:
         run: ./gradlew compileDebugKotlin
 
       - name: Android Lint
+        # AGP 8.x + Kotlin 2.x の lint クラッシュがあるため一時的に informational
+        continue-on-error: true
         run: ./gradlew lintDebug
