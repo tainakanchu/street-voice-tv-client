@@ -23,9 +23,13 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.RepeatOne
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Visibility
+import com.example.streetvoicetv.playback.RepeatMode
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -245,9 +249,16 @@ fun PlayerScreen(
 
                         // Controls
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
+                            Button(onClick = { viewModel.toggleShuffle() }) {
+                                Icon(
+                                    Icons.Default.Shuffle,
+                                    "Shuffle",
+                                    tint = if (playbackState.shuffleEnabled) MaterialTheme.colorScheme.primary else Color.White,
+                                )
+                            }
                             Button(
                                 onClick = { viewModel.skipPrevious() },
                                 enabled = playbackState.hasPrevious || playbackState.positionMs > 3000,
@@ -266,6 +277,16 @@ fun PlayerScreen(
                                 enabled = playbackState.hasNext,
                             ) {
                                 Icon(Icons.Default.SkipNext, "Next")
+                            }
+                            Button(onClick = { viewModel.toggleRepeatMode() }) {
+                                Icon(
+                                    when (playbackState.repeatMode) {
+                                        RepeatMode.ONE -> Icons.Default.RepeatOne
+                                        else -> Icons.Default.Repeat
+                                    },
+                                    "Repeat",
+                                    tint = if (playbackState.repeatMode != RepeatMode.OFF) MaterialTheme.colorScheme.primary else Color.White,
+                                )
                             }
                             if (isLoggedIn) {
                                 Button(onClick = { viewModel.toggleLike() }) {

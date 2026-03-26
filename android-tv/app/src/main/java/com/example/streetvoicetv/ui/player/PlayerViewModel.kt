@@ -90,6 +90,14 @@ class PlayerViewModel @Inject constructor(
         playbackManager.seekTo(positionMs)
     }
 
+    fun toggleShuffle() {
+        playbackManager.toggleShuffle()
+    }
+
+    fun toggleRepeatMode() {
+        playbackManager.toggleRepeatMode()
+    }
+
     fun toggleLike() {
         val currentSongId = playbackManager.state.value.song?.id ?: return
         viewModelScope.launch {

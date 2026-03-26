@@ -45,6 +45,12 @@ class PlaybackManager @Inject constructor(
     private var queue: List<Song> = emptyList()
     private var currentIndex: Int = -1
 
+    // Shuffle & Repeat
+    private var shuffleEnabled = false
+    private var repeatMode = RepeatMode.OFF
+    private var shuffledIndices: List<Int> = emptyList()
+    private var shufflePosition: Int = -1
+
     @OptIn(UnstableApi::class)
     private val dataSourceFactory = DefaultHttpDataSource.Factory()
         .setUserAgent("StreetVoiceTV/1.0")
@@ -70,7 +76,12 @@ class PlaybackManager @Inject constructor(
             if (playbackState == Player.STATE_ENDED) {
                 _state.value = _state.value.copy(isPlaying = false)
                 stopProgressTracking()
-                playNext()
+                if (repeatMode == RepeatMode.ONE) {
+                    player.seekTo(0)
+                    player.play()
+                } else {
+                    playNext()
+                }
             }
         }
 
@@ -87,6 +98,7 @@ class PlaybackManager @Inject constructor(
     fun setQueue(songs: List<Song>, startIndex: Int) {
         queue = songs
         currentIndex = startIndex
+        if (shuffleEnabled) generateShuffledIndices()
     }
 
     /** キュー付きで再生を開始する */
@@ -121,6 +133,8 @@ class PlaybackManager @Inject constructor(
             error = null,
             queueSize = queue.size,
             queueIndex = currentIndex,
+            shuffleEnabled = shuffleEnabled,
+            repeatMode = repeatMode,
         )
 
         val mediaItem = MediaItem.Builder()
@@ -149,28 +163,65 @@ class PlaybackManager @Inject constructor(
 
     /** 次の曲を再生 */
     fun playNext() {
-        val nextIndex = currentIndex + 1
-        if (nextIndex >= queue.size) {
-            // キュー末尾 → 停止
-            _state.value = _state.value.copy(isPlaying = false)
-            return
+        if (shuffleEnabled) {
+            val nextPos = shufflePosition + 1
+            if (nextPos >= shuffledIndices.size) {
+                if (repeatMode == RepeatMode.ALL) {
+                    generateShuffledIndices()
+                    loadAndPlay(shuffledIndices[0])
+                } else {
+                    _state.value = _state.value.copy(isPlaying = false)
+                }
+                return
+            }
+            shufflePosition = nextPos
+            loadAndPlay(shuffledIndices[shufflePosition])
+        } else {
+            val nextIndex = currentIndex + 1
+            if (nextIndex >= queue.size) {
+                if (repeatMode == RepeatMode.ALL) {
+                    loadAndPlay(0)
+                } else {
+                    _state.value = _state.value.copy(isPlaying = false)
+                }
+                return
+            }
+            loadAndPlay(nextIndex)
         }
-        loadAndPlay(nextIndex)
     }
 
     /** 前の曲を再生 */
     fun playPrevious() {
-        // 再生位置が3秒以上なら曲頭に戻す、それ以外は前の曲
+        // 再生位置が3秒以上なら曲頭に戻す
         if (player.currentPosition > 3000) {
             player.seekTo(0)
             return
         }
-        val prevIndex = currentIndex - 1
-        if (prevIndex < 0) {
-            player.seekTo(0)
-            return
+        if (shuffleEnabled) {
+            val prevPos = shufflePosition - 1
+            if (prevPos < 0) {
+                if (repeatMode == RepeatMode.ALL) {
+                    shufflePosition = shuffledIndices.size - 1
+                    loadAndPlay(shuffledIndices[shufflePosition])
+                } else {
+                    player.seekTo(0)
+                }
+                return
+            }
+            shufflePosition = prevPos
+            loadAndPlay(shuffledIndices[shufflePosition])
+        } else {
+            val prevIndex = currentIndex - 1
+            if (prevIndex < 0) {
+                if (repeatMode == RepeatMode.ALL) {
+                    loadAndPlay(queue.size - 1)
+                } else {
+                    player.seekTo(0)
+                }
+                return
+            }
+            loadAndPlay(prevIndex)
         }
-        loadAndPlay(prevIndex)
     }
 
     private fun loadAndPlay(index: Int) {
@@ -197,6 +248,34 @@ class PlaybackManager @Inject constructor(
                     )
                 }
         }
+    }
+
+    fun toggleShuffle() {
+        shuffleEnabled = !shuffleEnabled
+        if (shuffleEnabled) {
+            generateShuffledIndices()
+        } else {
+            shuffledIndices = emptyList()
+            shufflePosition = -1
+        }
+        _state.value = _state.value.copy(shuffleEnabled = shuffleEnabled)
+    }
+
+    fun toggleRepeatMode() {
+        repeatMode = when (repeatMode) {
+            RepeatMode.OFF -> RepeatMode.ALL
+            RepeatMode.ALL -> RepeatMode.ONE
+            RepeatMode.ONE -> RepeatMode.OFF
+        }
+        _state.value = _state.value.copy(repeatMode = repeatMode)
+    }
+
+    private fun generateShuffledIndices() {
+        val indices = queue.indices.toMutableList()
+        indices.remove(currentIndex)
+        indices.shuffle()
+        shuffledIndices = listOf(currentIndex) + indices
+        shufflePosition = 0
     }
 
     fun togglePlayPause() {
