@@ -92,7 +92,7 @@ fun NowPlayingBar(
             ) {
                 Icon(
                     imageVector = if (playbackState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = if (playbackState.isPlaying) "Pause" else "Play",
+                    contentDescription = if (playbackState.isPlaying) "暫停" else "播放",
                     modifier = Modifier.size(20.dp),
                 )
             }

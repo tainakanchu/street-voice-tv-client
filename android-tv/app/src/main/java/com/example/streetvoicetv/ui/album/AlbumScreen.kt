@@ -62,8 +62,8 @@ fun AlbumScreen(
                         color = MaterialTheme.colorScheme.error,
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Button(onClick = { viewModel.retry() }) { Text("Retry") }
-                        Button(onClick = onBack) { Text("Back") }
+                        Button(onClick = { viewModel.retry() }) { Text("重試") }
+                        Button(onClick = onBack) { Text("返回") }
                     }
                 }
             }
@@ -109,7 +109,7 @@ fun AlbumScreen(
                         }
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "${album.songsCount} songs",
+                            text = "${album.songsCount} 首歌曲",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -122,7 +122,7 @@ fun AlbumScreen(
                 if (uiState.songs.isEmpty()) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(
-                            text = "No songs in this album",
+                            text = "這張專輯沒有歌曲",
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }

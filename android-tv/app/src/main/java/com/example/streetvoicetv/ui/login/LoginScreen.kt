@@ -58,7 +58,7 @@ fun LoginScreen(
     Column(modifier = Modifier.fillMaxSize()) {
         // Header
         Text(
-            text = "Login to StreetVoice  (press Back when done)",
+            text = "登入 StreetVoice（完成後請按返回鍵）",
             style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 48.dp, vertical = 12.dp),

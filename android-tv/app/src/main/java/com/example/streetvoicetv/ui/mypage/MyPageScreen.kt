@@ -101,12 +101,12 @@ fun MyPageScreen(
                     Spacer(modifier = Modifier.height(4.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         Text(
-                            text = "${profile?.followersCount ?: 0} followers",
+                            text = "粉絲 ${profile?.followersCount ?: 0}",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Text(
-                            text = "${profile?.followingCount ?: 0} following",
+                            text = "追蹤中 ${profile?.followingCount ?: 0}",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -116,7 +116,7 @@ fun MyPageScreen(
                     viewModel.logout()
                     onLoggedOut()
                 }) {
-                    Text("Logout")
+                    Text("登出")
                 }
             }
         }
@@ -126,7 +126,7 @@ fun MyPageScreen(
             item {
                 Column {
                     Text(
-                        text = "My Playlists",
+                        text = "我的歌單",
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(start = HPad, bottom = 8.dp),
@@ -147,7 +147,7 @@ fun MyPageScreen(
         if (uiState.likedSongs.isNotEmpty()) {
             item {
                 Text(
-                    text = "Liked Songs",
+                    text = "喜歡的歌曲",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(start = HPad, bottom = 4.dp),
@@ -171,7 +171,7 @@ fun MyPageScreen(
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        "No liked songs or playlists yet",
+                        "還沒有喜歡的歌曲或歌單",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }

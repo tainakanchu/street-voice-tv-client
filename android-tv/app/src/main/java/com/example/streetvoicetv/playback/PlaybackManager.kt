@@ -58,6 +58,7 @@ class PlaybackManager @Inject constructor(
 
     val player: ExoPlayer by lazy {
         ExoPlayer.Builder(context).build().apply {
+            volume = 0.7f
             addListener(playerListener)
         }
     }

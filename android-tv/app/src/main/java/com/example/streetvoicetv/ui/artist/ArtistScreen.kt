@@ -67,8 +67,8 @@ fun ArtistScreen(
                         color = MaterialTheme.colorScheme.error,
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Button(onClick = { viewModel.retry() }) { Text("Retry") }
-                        Button(onClick = onBack) { Text("Back") }
+                        Button(onClick = { viewModel.retry() }) { Text("重試") }
+                        Button(onClick = onBack) { Text("返回") }
                     }
                 }
             }
@@ -107,12 +107,12 @@ fun ArtistScreen(
                         Spacer(modifier = Modifier.height(4.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                             Text(
-                                text = "${artist.songsCount} songs",
+                                text = "${artist.songsCount} 首歌曲",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Text(
-                                text = "${artist.followersCount} followers",
+                                text = "粉絲 ${artist.followersCount}",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -147,8 +147,8 @@ fun ArtistScreen(
                         ) {
                             Text(
                                 text = when (tab) {
-                                    ArtistTab.Songs -> "Songs (${uiState.songs.size})"
-                                    ArtistTab.Albums -> "Albums (${uiState.albums.size})"
+                                    ArtistTab.Songs -> "歌曲 (${uiState.songs.size})"
+                                    ArtistTab.Albums -> "專輯 (${uiState.albums.size})"
                                 },
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                             )
@@ -164,7 +164,7 @@ fun ArtistScreen(
                         if (uiState.songs.isEmpty()) {
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                 Text(
-                                    text = "No songs",
+                                    text = "沒有歌曲",
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
@@ -188,7 +188,7 @@ fun ArtistScreen(
                         if (uiState.albums.isEmpty()) {
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                 Text(
-                                    text = "No albums",
+                                    text = "沒有專輯",
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
