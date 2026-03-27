@@ -1,0 +1,33 @@
+name: Check
+
+on:
+  pull_request:
+    branches: [master]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android-tv
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Compile (type check)
+        run: ./gradlew compileDebugKotlin
+
+      - name: Android Lint
+        # AGP 8.x + Kotlin 2.x の lint クラッシュがあるため一時的に informational
+        continue-on-error: true
+        run: ./gradlew lintDebug
