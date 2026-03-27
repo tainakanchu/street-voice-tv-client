@@ -52,25 +52,25 @@ fun UpdateDialog(
                 when (state) {
                     is UpdateState.Available -> {
                         Text(
-                            "Update Available",
+                            "有新版本可用",
                             style = MaterialTheme.typography.headlineSmall,
                         )
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            "v${state.version} is available.",
+                            "v${state.version} 已可使用",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Spacer(Modifier.height(24.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Button(onClick = onDismiss) { Text("Later") }
-                            Button(onClick = onUpdate) { Text("Update") }
+                            Button(onClick = onDismiss) { Text("稍後") }
+                            Button(onClick = onUpdate) { Text("更新") }
                         }
                     }
 
                     is UpdateState.Downloading -> {
                         Text(
-                            "Downloading...",
+                            "下載中...",
                             style = MaterialTheme.typography.headlineSmall,
                         )
                         Spacer(Modifier.height(16.dp))
@@ -92,12 +92,12 @@ fun UpdateDialog(
 
                     is UpdateState.ReadyToInstall -> {
                         Text(
-                            "Ready to Install",
+                            "準備安裝",
                             style = MaterialTheme.typography.headlineSmall,
                         )
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            "Download complete. Launching installer...",
+                            "下載完成，正在啟動安裝程式...",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -105,7 +105,7 @@ fun UpdateDialog(
 
                     is UpdateState.Error -> {
                         Text(
-                            "Update Failed",
+                            "更新失敗",
                             style = MaterialTheme.typography.headlineSmall,
                             color = MaterialTheme.colorScheme.error,
                         )
@@ -116,7 +116,7 @@ fun UpdateDialog(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Spacer(Modifier.height(24.dp))
-                        Button(onClick = onDismiss) { Text("Close") }
+                        Button(onClick = onDismiss) { Text("關閉") }
                     }
 
                     else -> {}
