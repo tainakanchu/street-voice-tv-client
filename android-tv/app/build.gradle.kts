@@ -16,7 +16,7 @@ android {
         minSdk = 28
         targetSdk = 35
         versionCode = 1
-        versionName = "0.1.0-poc"
+        versionName = "0.1.0"
 
         buildConfigField("String", "STREETVOICE_BASE_URL", "\"https://streetvoice.com\"")
     }
