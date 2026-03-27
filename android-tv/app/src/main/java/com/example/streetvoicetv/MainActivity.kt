@@ -1,5 +1,6 @@
 package com.example.streetvoicetv
 
+import android.app.Activity
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -22,6 +23,8 @@ import androidx.navigation.navArgument
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import com.example.streetvoicetv.data.auth.SessionManager
+import com.example.streetvoicetv.data.update.UpdateChecker
+import com.example.streetvoicetv.data.update.UpdateState
 import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.playback.PlaybackManager
 import com.example.streetvoicetv.ui.album.AlbumScreen
@@ -34,6 +37,7 @@ import com.example.streetvoicetv.ui.player.PlayerScreen
 import com.example.streetvoicetv.ui.playlist.PlaylistScreen
 import com.example.streetvoicetv.ui.search.SearchScreen
 import com.example.streetvoicetv.ui.theme.StreetVoiceTvTheme
+import com.example.streetvoicetv.ui.update.UpdateDialog
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -42,12 +46,14 @@ class MainActivity : ComponentActivity() {
 
     @Inject lateinit var playbackManager: PlaybackManager
     @Inject lateinit var sessionManager: SessionManager
+    @Inject lateinit var updateChecker: UpdateChecker
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        updateChecker.checkForUpdate()
         setContent {
             StreetVoiceTvTheme {
-                StreetVoiceTvApp(playbackManager, sessionManager)
+                StreetVoiceTvApp(playbackManager, sessionManager, updateChecker, this)
             }
         }
     }
@@ -55,13 +61,24 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun StreetVoiceTvApp(playbackManager: PlaybackManager, sessionManager: SessionManager) {
+fun StreetVoiceTvApp(
+    playbackManager: PlaybackManager,
+    sessionManager: SessionManager,
+    updateChecker: UpdateChecker,
+    activity: Activity,
+) {
     val navController = rememberNavController()
     val playbackState by playbackManager.state.collectAsState()
     val isLoggedIn by sessionManager.isLoggedIn.collectAsState()
     val profileImageUrl by sessionManager.profileImageUrl.collectAsState()
+    val updateState by updateChecker.state.collectAsState()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+
+    // auto-launch installer when download completes
+    if (updateState is UpdateState.ReadyToInstall) {
+        updateChecker.installApk(activity)
+    }
 
     val showNowPlaying = playbackState.hasMedia
         && currentRoute?.startsWith("player") != true
@@ -185,5 +202,11 @@ fun StreetVoiceTvApp(playbackManager: PlaybackManager, sessionManager: SessionMa
                     .padding(16.dp),
             )
         }
+
+        UpdateDialog(
+            state = updateState,
+            onUpdate = { updateChecker.downloadAndInstall() },
+            onDismiss = { updateChecker.dismiss() },
+        )
     }
 }
