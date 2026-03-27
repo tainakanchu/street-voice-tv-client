@@ -79,7 +79,7 @@ fun PlayerScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("Loading song...", color = MaterialTheme.colorScheme.onSurface)
+                    Text("載入歌曲中...", color = MaterialTheme.colorScheme.onSurface)
                 }
             }
         }
@@ -90,11 +90,11 @@ fun PlayerScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    Text("Playback Error", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.error)
+                    Text("播放錯誤", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.error)
                     Text(loadingState.error!!, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Button(onClick = { viewModel.retry() }) { Text("Retry") }
-                        Button(onClick = onBack) { Text("Back") }
+                        Button(onClick = { viewModel.retry() }) { Text("重試") }
+                        Button(onClick = onBack) { Text("返回") }
                     }
                 }
             }
@@ -255,7 +255,7 @@ fun PlayerScreen(
                             Button(onClick = { viewModel.toggleShuffle() }) {
                                 Icon(
                                     Icons.Default.Shuffle,
-                                    "Shuffle",
+                                    "隨機播放",
                                     tint = if (playbackState.shuffleEnabled) MaterialTheme.colorScheme.primary else Color.White,
                                 )
                             }
@@ -263,12 +263,12 @@ fun PlayerScreen(
                                 onClick = { viewModel.skipPrevious() },
                                 enabled = playbackState.hasPrevious || playbackState.positionMs > 3000,
                             ) {
-                                Icon(Icons.Default.SkipPrevious, "Previous")
+                                Icon(Icons.Default.SkipPrevious, "上一首")
                             }
                             Button(onClick = { viewModel.togglePlayPause() }) {
                                 Icon(
                                     if (playbackState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                    if (playbackState.isPlaying) "Pause" else "Play",
+                                    if (playbackState.isPlaying) "暫停" else "播放",
                                     Modifier.size(32.dp),
                                 )
                             }
@@ -276,7 +276,7 @@ fun PlayerScreen(
                                 onClick = { viewModel.skipNext() },
                                 enabled = playbackState.hasNext,
                             ) {
-                                Icon(Icons.Default.SkipNext, "Next")
+                                Icon(Icons.Default.SkipNext, "下一首")
                             }
                             Button(onClick = { viewModel.toggleRepeatMode() }) {
                                 Icon(
@@ -284,7 +284,7 @@ fun PlayerScreen(
                                         RepeatMode.ONE -> Icons.Default.RepeatOne
                                         else -> Icons.Default.Repeat
                                     },
-                                    "Repeat",
+                                    "重複播放",
                                     tint = if (playbackState.repeatMode != RepeatMode.OFF) MaterialTheme.colorScheme.primary else Color.White,
                                 )
                             }
@@ -292,7 +292,7 @@ fun PlayerScreen(
                                 Button(onClick = { viewModel.toggleLike() }) {
                                     Icon(
                                         if (isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                                        if (isLiked) "Unlike" else "Like",
+                                        if (isLiked) "取消喜歡" else "喜歡",
                                         tint = if (isLiked) MaterialTheme.colorScheme.primary else Color.White,
                                     )
                                 }
@@ -316,7 +316,7 @@ fun PlayerScreen(
                             .verticalScroll(rememberScrollState()),
                     ) {
                         if (!song.synopsis.isNullOrBlank()) {
-                            Text("About", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                            Text("關於", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
                                 text = song.synopsis,
@@ -327,7 +327,7 @@ fun PlayerScreen(
                         }
 
                         if (!song.lyrics.isNullOrBlank()) {
-                            Text("Lyrics", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                            Text("歌詞", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
                                 text = song.lyrics,
@@ -340,7 +340,7 @@ fun PlayerScreen(
                         if (song.synopsis.isNullOrBlank() && song.lyrics.isNullOrBlank()) {
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                 Text(
-                                    "No description or lyrics available",
+                                    "沒有簡介或歌詞",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = Color.White.copy(alpha = 0.4f),
                                 )

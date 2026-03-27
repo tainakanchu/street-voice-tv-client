@@ -69,7 +69,7 @@ fun HomeScreen(
                 modifier = Modifier.weight(1f),
             ) {
                 Text(
-                    text = "Search songs & artists...",
+                    text = "搜尋歌曲與音樂人...",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
@@ -84,7 +84,7 @@ fun HomeScreen(
                 ) {
                     AsyncImage(
                         model = profileImageUrl,
-                        contentDescription = "My Page",
+                        contentDescription = "我的頁面",
                         modifier = Modifier
                             .fillMaxSize()
                             .clip(CircleShape),
@@ -97,7 +97,7 @@ fun HomeScreen(
                     shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
                 ) {
                     Text(
-                        text = "Login",
+                        text = "登入",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
@@ -121,7 +121,7 @@ fun HomeScreen(
                 if (uiState.chartSongs.isNotEmpty()) {
                     item {
                         SongCarouselSection(
-                            title = "Realtime Chart",
+                            title = "即時排行",
                             songs = uiState.chartSongs,
                             onSongSelected = onSongSelected,
                             showRank = true,
@@ -132,7 +132,7 @@ fun HomeScreen(
                 if (uiState.editorPicks.isNotEmpty()) {
                     item {
                         SongCarouselSection(
-                            title = "Editor's Choice",
+                            title = "推薦單曲",
                             songs = uiState.editorPicks,
                             onSongSelected = onSongSelected,
                         )
@@ -142,7 +142,7 @@ fun HomeScreen(
                 if (uiState.myPlaylists.isNotEmpty()) {
                     item {
                         PlaylistSection(
-                            title = "My Playlists",
+                            title = "我的歌單",
                             playlists = uiState.myPlaylists,
                             onPlaylistSelected = onPlaylistSelected,
                         )
@@ -152,7 +152,7 @@ fun HomeScreen(
                 if (uiState.playlists.isNotEmpty()) {
                     item {
                         PlaylistSection(
-                            title = "Playlists",
+                            title = "歌單",
                             playlists = uiState.playlists,
                             onPlaylistSelected = onPlaylistSelected,
                         )

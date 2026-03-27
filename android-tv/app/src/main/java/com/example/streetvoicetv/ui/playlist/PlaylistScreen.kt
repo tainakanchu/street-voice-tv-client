@@ -58,8 +58,8 @@ fun PlaylistScreen(
                 ) {
                     Text(uiState.error!!, color = MaterialTheme.colorScheme.error)
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Button(onClick = { viewModel.retry() }) { Text("Retry") }
-                        Button(onClick = onBack) { Text("Back") }
+                        Button(onClick = { viewModel.retry() }) { Text("重試") }
+                        Button(onClick = onBack) { Text("返回") }
                     }
                 }
             }
@@ -98,14 +98,14 @@ fun PlaylistScreen(
                             if (playlist.curatorName != null) {
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = "by ${playlist.curatorName}",
+                                    text = "${playlist.curatorName} 策劃",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "${playlist.songsCount} songs",
+                                text = "${playlist.songsCount} 首歌曲",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

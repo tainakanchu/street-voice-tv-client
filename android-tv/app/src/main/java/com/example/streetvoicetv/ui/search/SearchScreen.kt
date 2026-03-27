@@ -79,7 +79,7 @@ fun SearchScreen(
                 onValueChange = viewModel::onQueryChange,
                 modifier = Modifier.weight(1f),
                 placeholder = {
-                    androidx.compose.material3.Text("Search songs, artists & playlists...", color = Color.Gray)
+                    androidx.compose.material3.Text("搜尋歌曲、音樂人與歌單...", color = Color.Gray)
                 },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
@@ -96,7 +96,7 @@ fun SearchScreen(
             Spacer(modifier = Modifier.width(12.dp))
 
             Button(onClick = { viewModel.search() }) {
-                Text("Search")
+                Text("搜尋")
             }
         }
 
@@ -120,7 +120,7 @@ fun SearchScreen(
 
             uiState.isEmpty && uiState.query.isNotBlank() -> {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No results for \"${uiState.query}\"", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("找不到「${uiState.query}」的結果", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
 
@@ -131,7 +131,7 @@ fun SearchScreen(
                     contentPadding = PaddingValues(horizontal = HPad, vertical = 8.dp),
                 ) {
                     if (uiState.artists.isNotEmpty()) {
-                        item { SectionHeader("Artists") }
+                        item { SectionHeader("音樂人") }
                         items(uiState.artists, key = { "artist_${it.id}" }) { artist ->
                             ArtistListItem(artist = artist, onClick = { onArtistSelected(artist) })
                         }
@@ -139,7 +139,7 @@ fun SearchScreen(
                     }
 
                     if (uiState.playlists.isNotEmpty()) {
-                        item { SectionHeader("Playlists") }
+                        item { SectionHeader("歌單") }
                         items(uiState.playlists, key = { "playlist_${it.id}" }) { playlist ->
                             PlaylistListItem(playlist = playlist, onClick = { onPlaylistSelected(playlist) })
                         }
@@ -147,7 +147,7 @@ fun SearchScreen(
                     }
 
                     if (uiState.songs.isNotEmpty()) {
-                        item { SectionHeader("Songs") }
+                        item { SectionHeader("歌曲") }
                         items(uiState.songs, key = { "song_${it.id}" }) { song ->
                             SongListItem(song = song, onClick = { onSongSelected(song, uiState.songs) })
                         }
@@ -163,7 +163,7 @@ fun SearchScreen(
                             .padding(horizontal = HPad),
                     ) {
                         Text(
-                            text = "Recent Searches",
+                            text = "最近搜尋",
                             style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.padding(bottom = 12.dp),
@@ -188,7 +188,7 @@ fun SearchScreen(
                     }
                 } else {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("Search for music on StreetVoice", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("在 StreetVoice 上搜尋音樂", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -215,11 +215,11 @@ private fun ErrorContent(message: String, onRetry: () -> Unit, onDismiss: () -> 
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text("Something went wrong", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.error)
+            Text("發生錯誤", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.error)
             Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = onRetry) { Text("Retry") }
-                Button(onClick = onDismiss) { Text("Dismiss") }
+                Button(onClick = onRetry) { Text("重試") }
+                Button(onClick = onDismiss) { Text("關閉") }
             }
         }
     }
