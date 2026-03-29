@@ -38,18 +38,19 @@ class PlaybackManager @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var progressJob: Job? = null
 
-    private val _state = MutableStateFlow(PlaybackState())
+    // Shuffle & Repeat (persisted via SharedPreferences)
+    private val prefs = context.getSharedPreferences("playback_settings", Context.MODE_PRIVATE)
+    private var shuffleEnabled = prefs.getBoolean(KEY_SHUFFLE, false)
+    private var repeatMode = RepeatMode.entries.getOrElse(prefs.getInt(KEY_REPEAT, 0)) { RepeatMode.OFF }
+    private var shuffledIndices: List<Int> = emptyList()
+    private var shufflePosition: Int = -1
+
+    private val _state = MutableStateFlow(PlaybackState(shuffleEnabled = shuffleEnabled, repeatMode = repeatMode))
     val state: StateFlow<PlaybackState> = _state.asStateFlow()
 
     // Queue
     private var queue: List<Song> = emptyList()
     private var currentIndex: Int = -1
-
-    // Shuffle & Repeat
-    private var shuffleEnabled = false
-    private var repeatMode = RepeatMode.OFF
-    private var shuffledIndices: List<Int> = emptyList()
-    private var shufflePosition: Int = -1
 
     @OptIn(UnstableApi::class)
     private val dataSourceFactory = DefaultHttpDataSource.Factory()
@@ -259,6 +260,7 @@ class PlaybackManager @Inject constructor(
             shuffledIndices = emptyList()
             shufflePosition = -1
         }
+        prefs.edit().putBoolean(KEY_SHUFFLE, shuffleEnabled).apply()
         _state.value = _state.value.copy(shuffleEnabled = shuffleEnabled)
     }
 
@@ -268,6 +270,7 @@ class PlaybackManager @Inject constructor(
             RepeatMode.ALL -> RepeatMode.ONE
             RepeatMode.ONE -> RepeatMode.OFF
         }
+        prefs.edit().putInt(KEY_REPEAT, repeatMode.ordinal).apply()
         _state.value = _state.value.copy(repeatMode = repeatMode)
     }
 
@@ -329,5 +332,10 @@ class PlaybackManager @Inject constructor(
     private fun stopProgressTracking() {
         progressJob?.cancel()
         progressJob = null
+    }
+
+    companion object {
+        private const val KEY_SHUFFLE = "shuffle_enabled"
+        private const val KEY_REPEAT = "repeat_mode"
     }
 }
