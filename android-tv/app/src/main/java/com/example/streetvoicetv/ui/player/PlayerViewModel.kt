@@ -11,6 +11,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -40,11 +41,25 @@ class PlayerViewModel @Inject constructor(
             if (current.song?.id == songId && current.hasMedia) {
                 // 既に同じ曲を再生中ならロードし直さない
                 _loadingState.value = PlayerLoadingState(isLoaded = true)
+                fetchLikeStatus(songId)
             } else {
                 loadSongAndPlay(songId)
             }
         } else {
             _loadingState.value = PlayerLoadingState(error = "Invalid song ID")
+        }
+
+        // キュー内で曲が切り替わったときに isLiked を更新する
+        viewModelScope.launch {
+            playbackManager.state
+                .distinctUntilChangedBy { it.song?.id }
+                .collect { state ->
+                    val id = state.song?.id ?: return@collect
+                    // init で既にロード済みの曲はスキップ
+                    if (id != songId) {
+                        fetchLikeStatus(id)
+                    }
+                }
         }
     }
 
@@ -71,6 +86,14 @@ class PlayerViewModel @Inject constructor(
             _isLiked.value = song.isLiked
             playbackManager.playCurrentInQueue(song, stream.hlsUrl)
             _loadingState.value = PlayerLoadingState(isLoaded = true)
+        }
+    }
+
+    private fun fetchLikeStatus(songId: Int) {
+        viewModelScope.launch {
+            _isLiked.value = false
+            repository.getSongDetail(songId)
+                .onSuccess { song -> _isLiked.value = song.isLiked }
         }
     }
 
