@@ -114,6 +114,20 @@ class StreetVoiceRepositoryImpl @Inject constructor(
         }
     }
 
+    // --- Logged-in User Feed ---
+
+    override suspend fun getFollowingFeed(limit: Int, offset: Int): Result<List<Song>> {
+        return runCatching {
+            api.getFollowingFeed(limit, offset).results.map { it.contentObject.toDomain() }
+        }
+    }
+
+    override suspend fun getPlayHistory(username: String, limit: Int, offset: Int): Result<List<Song>> {
+        return runCatching {
+            api.getPlayHistory(username, limit, offset).results.map { it.contentObject.toDomain() }
+        }
+    }
+
     // --- Home / Discover ---
 
     override suspend fun getRealtimeChart(limit: Int): Result<List<Song>> {

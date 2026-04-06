@@ -139,6 +139,36 @@ fun HomeScreen(
                     }
                 }
 
+                if (uiState.followingFeed.isNotEmpty()) {
+                    item {
+                        SongCarouselSection(
+                            title = "我的追蹤新發布",
+                            songs = uiState.followingFeed,
+                            onSongSelected = onSongSelected,
+                        )
+                    }
+                }
+
+                if (uiState.playHistory.isNotEmpty()) {
+                    item {
+                        SongCarouselSection(
+                            title = "播放紀錄",
+                            songs = uiState.playHistory,
+                            onSongSelected = onSongSelected,
+                        )
+                    }
+                }
+
+                if (uiState.likedSongs.isNotEmpty()) {
+                    item {
+                        SongCarouselSection(
+                            title = "我的喜歡",
+                            songs = uiState.likedSongs,
+                            onSongSelected = onSongSelected,
+                        )
+                    }
+                }
+
                 if (uiState.myPlaylists.isNotEmpty()) {
                     item {
                         PlaylistSection(

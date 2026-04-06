@@ -43,6 +43,15 @@ class HomeViewModel @Inject constructor(
             val myPlaylistsDeferred = if (currentUsername != null) {
                 async { repository.getArtistPlaylists(currentUsername) }
             } else null
+            val followingFeedDeferred = if (currentUsername != null) {
+                async { repository.getFollowingFeed(limit = 20) }
+            } else null
+            val playHistoryDeferred = if (currentUsername != null) {
+                async { repository.getPlayHistory(currentUsername, limit = 20) }
+            } else null
+            val likedSongsDeferred = if (currentUsername != null) {
+                async { repository.getLikedSongs(currentUsername, limit = 20) }
+            } else null
 
             // ログイン中かつプロフィール画像未取得なら取得
             if (currentUsername != null && sessionManager.profileImageUrl.value == null) {
@@ -57,6 +66,9 @@ class HomeViewModel @Inject constructor(
             val editor = editorDeferred.await().getOrDefault(emptyList())
             val playlists = playlistsDeferred.await().getOrDefault(emptyList())
             val myPlaylists = myPlaylistsDeferred?.await()?.getOrDefault(emptyList()) ?: emptyList()
+            val followingFeed = followingFeedDeferred?.await()?.getOrDefault(emptyList()) ?: emptyList()
+            val playHistory = playHistoryDeferred?.await()?.getOrDefault(emptyList()) ?: emptyList()
+            val likedSongs = likedSongsDeferred?.await()?.getOrDefault(emptyList()) ?: emptyList()
 
             _uiState.value = _uiState.value.copy(
                 isLoading = false,
@@ -64,6 +76,9 @@ class HomeViewModel @Inject constructor(
                 editorPicks = editor,
                 playlists = playlists,
                 myPlaylists = myPlaylists,
+                followingFeed = followingFeed,
+                playHistory = playHistory,
+                likedSongs = likedSongs,
             )
         }
     }
@@ -77,5 +92,8 @@ data class HomeUiState(
     val editorPicks: List<Song> = emptyList(),
     val playlists: List<Playlist> = emptyList(),
     val myPlaylists: List<Playlist> = emptyList(),
+    val followingFeed: List<Song> = emptyList(),
+    val playHistory: List<Song> = emptyList(),
+    val likedSongs: List<Song> = emptyList(),
     val error: String? = null,
 )

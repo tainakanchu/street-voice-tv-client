@@ -30,6 +30,10 @@ interface StreetVoiceRepository {
     suspend fun getAlbumDetail(albumId: Int): Result<Album>
     suspend fun getAlbumSongs(albumId: Int, limit: Int = 50, offset: Int = 0): Result<List<Song>>
 
+    // Logged-in User Feed
+    suspend fun getFollowingFeed(limit: Int = 20, offset: Int = 0): Result<List<Song>>
+    suspend fun getPlayHistory(username: String, limit: Int = 20, offset: Int = 0): Result<List<Song>>
+
     // Home / Discover
     suspend fun getRealtimeChart(limit: Int = 20): Result<List<Song>>
     suspend fun getEditorChoice(limit: Int = 10): Result<List<Song>>

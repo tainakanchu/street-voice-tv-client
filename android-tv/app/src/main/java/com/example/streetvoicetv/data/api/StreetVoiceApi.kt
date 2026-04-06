@@ -154,6 +154,18 @@ class StreetVoiceApi @Inject constructor(
         executeRequest(request) { it }
     }
 
+    // --- Logged-in User Feed ---
+
+    suspend fun getFollowingFeed(limit: Int = 20, offset: Int = 0): LikedSongsResponse {
+        val url = "${config.baseUrl}/api/v4/feed/?type=song&limit=$limit&offset=$offset"
+        return get(url) { json.decodeFromString<LikedSongsResponse>(it) }
+    }
+
+    suspend fun getPlayHistory(username: String, limit: Int = 20, offset: Int = 0): LikedSongsResponse {
+        val url = "${config.baseUrl}/api/v4/user/$username/play-history/?limit=$limit&offset=$offset"
+        return get(url) { json.decodeFromString<LikedSongsResponse>(it) }
+    }
+
     // --- Home / Discover ---
 
     suspend fun getRealtimeChart(style: String = "all", limit: Int = 20): ChartResponse {
