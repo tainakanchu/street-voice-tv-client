@@ -43,6 +43,23 @@ fun AlbumScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
+    AlbumContent(
+        uiState = uiState,
+        onSongSelected = onSongSelected,
+        onRetry = { viewModel.retry() },
+        onBack = onBack,
+    )
+}
+
+/** Stateless album content (testable without Hilt / network). */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun AlbumContent(
+    uiState: AlbumUiState,
+    onSongSelected: (Song, List<Song>) -> Unit,
+    onRetry: () -> Unit,
+    onBack: () -> Unit,
+) {
     when {
         uiState.isLoading -> {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -62,7 +79,7 @@ fun AlbumScreen(
                         color = MaterialTheme.colorScheme.error,
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Button(onClick = { viewModel.retry() }) { Text("重試") }
+                        Button(onClick = onRetry) { Text("重試") }
                         Button(onClick = onBack) { Text("返回") }
                     }
                 }

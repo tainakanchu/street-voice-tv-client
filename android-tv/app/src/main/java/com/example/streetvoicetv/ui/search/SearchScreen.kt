@@ -56,6 +56,33 @@ fun SearchScreen(
     val uiState by viewModel.uiState.collectAsState()
     val searchHistory by viewModel.history.collectAsState()
 
+    SearchContent(
+        uiState = uiState,
+        searchHistory = searchHistory,
+        onQueryChange = viewModel::onQueryChange,
+        onSearch = { viewModel.search() },
+        onClearError = { viewModel.clearError() },
+        onSelectHistory = { viewModel.selectHistory(it) },
+        onSongSelected = onSongSelected,
+        onArtistSelected = onArtistSelected,
+        onPlaylistSelected = onPlaylistSelected,
+    )
+}
+
+/** Stateless search content (testable without Hilt / network). */
+@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+fun SearchContent(
+    uiState: SearchUiState,
+    searchHistory: List<String>,
+    onQueryChange: (String) -> Unit,
+    onSearch: () -> Unit,
+    onClearError: () -> Unit,
+    onSelectHistory: (String) -> Unit,
+    onSongSelected: (Song, List<Song>) -> Unit,
+    onArtistSelected: (Artist) -> Unit,
+    onPlaylistSelected: (Playlist) -> Unit,
+) {
     Column(modifier = Modifier.fillMaxSize()) {
         // Title (individually padded)
         Text(
@@ -76,14 +103,14 @@ fun SearchScreen(
         ) {
             OutlinedTextField(
                 value = uiState.query,
-                onValueChange = viewModel::onQueryChange,
+                onValueChange = onQueryChange,
                 modifier = Modifier.weight(1f),
                 placeholder = {
                     androidx.compose.material3.Text("搜尋歌曲、音樂人與歌單...", color = Color.Gray)
                 },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { viewModel.search() }),
+                keyboardActions = KeyboardActions(onSearch = { onSearch() }),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedTextColor = Color.White,
                     unfocusedTextColor = Color.White,
@@ -95,7 +122,7 @@ fun SearchScreen(
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            Button(onClick = { viewModel.search() }) {
+            Button(onClick = onSearch) {
                 Text("搜尋")
             }
         }
@@ -113,8 +140,8 @@ fun SearchScreen(
             uiState.error != null -> {
                 ErrorContent(
                     message = uiState.error!!,
-                    onRetry = { viewModel.search() },
-                    onDismiss = { viewModel.clearError() },
+                    onRetry = onSearch,
+                    onDismiss = onClearError,
                 )
             }
 
@@ -174,7 +201,7 @@ fun SearchScreen(
                         ) {
                             searchHistory.forEach { query ->
                                 Surface(
-                                    onClick = { viewModel.selectHistory(query) },
+                                    onClick = { onSelectHistory(query) },
                                     shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(20.dp)),
                                 ) {
                                     Text(

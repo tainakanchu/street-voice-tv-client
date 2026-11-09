@@ -48,6 +48,27 @@ fun ArtistScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
+    ArtistContent(
+        uiState = uiState,
+        onSongSelected = onSongSelected,
+        onAlbumSelected = onAlbumSelected,
+        onRetry = { viewModel.retry() },
+        onBack = onBack,
+        onSelectTab = { viewModel.selectTab(it) },
+    )
+}
+
+/** Stateless artist content (testable without Hilt / network). */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun ArtistContent(
+    uiState: ArtistUiState,
+    onSongSelected: (Song, List<Song>) -> Unit,
+    onAlbumSelected: (Album) -> Unit,
+    onRetry: () -> Unit,
+    onBack: () -> Unit,
+    onSelectTab: (ArtistTab) -> Unit,
+) {
     when {
         uiState.isLoading -> {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -67,7 +88,7 @@ fun ArtistScreen(
                         color = MaterialTheme.colorScheme.error,
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Button(onClick = { viewModel.retry() }) { Text("重試") }
+                        Button(onClick = onRetry) { Text("重試") }
                         Button(onClick = onBack) { Text("返回") }
                     }
                 }
@@ -143,7 +164,7 @@ fun ArtistScreen(
                     tabs.forEachIndexed { index, tab ->
                         Tab(
                             selected = index == selectedIndex,
-                            onFocus = { viewModel.selectTab(tab) },
+                            onFocus = { onSelectTab(tab) },
                         ) {
                             Text(
                                 text = when (tab) {

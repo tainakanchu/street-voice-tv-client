@@ -55,24 +55,7 @@ fun LoginScreen(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        // Header
-        Text(
-            text = "登入 StreetVoice（完成後請按返回鍵）",
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 48.dp, vertical = 12.dp),
-        )
-
-        if (isLoading) {
-            LinearProgressIndicator(
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 48.dp),
-            )
-        }
-
+    LoginContent(isLoading = isLoading) {
         // WebView
         AndroidView(
             factory = { context ->
@@ -108,6 +91,38 @@ fun LoginScreen(
             },
             modifier = Modifier.fillMaxSize(),
         )
+    }
+}
+
+/**
+ * Stateless login chrome (header + progress). The WebView is passed as [webContent]
+ * so that it can be replaced with a placeholder in screenshot tests.
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun LoginContent(
+    isLoading: Boolean,
+    webContent: @Composable () -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Header
+        Text(
+            text = "登入 StreetVoice（完成後請按返回鍵）",
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 48.dp, vertical = 12.dp),
+        )
+
+        if (isLoading) {
+            LinearProgressIndicator(
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 48.dp),
+            )
+        }
+
+        webContent()
     }
 }
 

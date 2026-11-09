@@ -43,6 +43,23 @@ fun PlaylistScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
+    PlaylistContent(
+        uiState = uiState,
+        onSongSelected = onSongSelected,
+        onRetry = { viewModel.retry() },
+        onBack = onBack,
+    )
+}
+
+/** Stateless playlist content (testable without Hilt / network). */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun PlaylistContent(
+    uiState: PlaylistUiState,
+    onSongSelected: (Song, List<Song>) -> Unit,
+    onRetry: () -> Unit,
+    onBack: () -> Unit,
+) {
     when {
         uiState.isLoading -> {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -58,7 +75,7 @@ fun PlaylistScreen(
                 ) {
                     Text(uiState.error!!, color = MaterialTheme.colorScheme.error)
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Button(onClick = { viewModel.retry() }) { Text("重試") }
+                        Button(onClick = onRetry) { Text("重試") }
                         Button(onClick = onBack) { Text("返回") }
                     }
                 }

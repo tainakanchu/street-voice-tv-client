@@ -27,6 +27,7 @@ import com.example.streetvoicetv.data.update.UpdateChecker
 import com.example.streetvoicetv.data.update.UpdateState
 import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.playback.PlaybackManager
+import com.example.streetvoicetv.playback.PlaybackState
 import com.example.streetvoicetv.ui.album.AlbumScreen
 import com.example.streetvoicetv.ui.artist.ArtistScreen
 import com.example.streetvoicetv.ui.components.NowPlayingBar
@@ -90,10 +91,17 @@ fun StreetVoiceTvApp(
         navController.navigate("player/${selected.id}")
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+    AppScaffold(
+        playbackState = playbackState,
+        showNowPlaying = showNowPlaying,
+        onNowPlayingTap = {
+            val songId = playbackState.song?.id
+            if (songId != null) navController.navigate("player/$songId")
+        },
+        onTogglePlayPause = { playbackManager.togglePlayPause() },
+        updateState = updateState,
+        onUpdate = { updateChecker.downloadAndInstall() },
+        onDismissUpdate = { updateChecker.dismiss() },
     ) {
         NavHost(
             navController = navController,
@@ -189,14 +197,37 @@ fun StreetVoiceTvApp(
             }
         }
 
+    }
+}
+
+/**
+ * Stateless app chrome: background, screen content, the floating NowPlayingBar
+ * and the update dialog overlay. Used by [StreetVoiceTvApp] and screenshot tests.
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun AppScaffold(
+    playbackState: PlaybackState,
+    showNowPlaying: Boolean,
+    onNowPlayingTap: () -> Unit,
+    onTogglePlayPause: () -> Unit,
+    updateState: UpdateState,
+    onUpdate: () -> Unit,
+    onDismissUpdate: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+    ) {
+        content()
+
         if (showNowPlaying) {
             NowPlayingBar(
                 playbackState = playbackState,
-                onTap = {
-                    val songId = playbackState.song?.id
-                    if (songId != null) navController.navigate("player/$songId")
-                },
-                onTogglePlayPause = { playbackManager.togglePlayPause() },
+                onTap = onNowPlayingTap,
+                onTogglePlayPause = onTogglePlayPause,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(16.dp),
@@ -205,8 +236,8 @@ fun StreetVoiceTvApp(
 
         UpdateDialog(
             state = updateState,
-            onUpdate = { updateChecker.downloadAndInstall() },
-            onDismiss = { updateChecker.dismiss() },
+            onUpdate = onUpdate,
+            onDismiss = onDismissUpdate,
         )
     }
 }

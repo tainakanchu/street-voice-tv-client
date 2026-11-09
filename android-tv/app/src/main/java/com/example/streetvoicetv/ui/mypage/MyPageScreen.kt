@@ -52,6 +52,26 @@ fun MyPageScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
+    MyPageContent(
+        uiState = uiState,
+        onSongSelected = onSongSelected,
+        onPlaylistSelected = onPlaylistSelected,
+        onLogout = {
+            viewModel.logout()
+            onLoggedOut()
+        },
+    )
+}
+
+/** Stateless my-page content (testable without Hilt / network). */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun MyPageContent(
+    uiState: MyPageUiState,
+    onSongSelected: (Song, List<Song>) -> Unit,
+    onPlaylistSelected: (Playlist) -> Unit,
+    onLogout: () -> Unit,
+) {
     if (uiState.isLoading) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
@@ -112,10 +132,7 @@ fun MyPageScreen(
                         )
                     }
                 }
-                Button(onClick = {
-                    viewModel.logout()
-                    onLoggedOut()
-                }) {
+                Button(onClick = onLogout) {
                     Text("登出")
                 }
             }

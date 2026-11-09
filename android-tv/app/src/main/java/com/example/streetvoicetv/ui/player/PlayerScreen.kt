@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Visibility
+import com.example.streetvoicetv.playback.PlaybackState
 import com.example.streetvoicetv.playback.RepeatMode
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -73,6 +74,41 @@ fun PlayerScreen(
     // Keep screen on while playing
     KeepScreenOn()
 
+    PlayerContent(
+        loadingState = loadingState,
+        playbackState = playbackState,
+        isLiked = isLiked,
+        isLoggedIn = isLoggedIn,
+        onRetry = { viewModel.retry() },
+        onBack = onBack,
+        onArtistSelected = onArtistSelected,
+        onToggleShuffle = { viewModel.toggleShuffle() },
+        onSkipPrevious = { viewModel.skipPrevious() },
+        onTogglePlayPause = { viewModel.togglePlayPause() },
+        onSkipNext = { viewModel.skipNext() },
+        onToggleRepeatMode = { viewModel.toggleRepeatMode() },
+        onToggleLike = { viewModel.toggleLike() },
+    )
+}
+
+/** Stateless player content (testable without Hilt / ExoPlayer / network). */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun PlayerContent(
+    loadingState: PlayerLoadingState,
+    playbackState: PlaybackState,
+    isLiked: Boolean,
+    isLoggedIn: Boolean,
+    onRetry: () -> Unit,
+    onBack: () -> Unit,
+    onArtistSelected: (String) -> Unit,
+    onToggleShuffle: () -> Unit,
+    onSkipPrevious: () -> Unit,
+    onTogglePlayPause: () -> Unit,
+    onSkipNext: () -> Unit,
+    onToggleRepeatMode: () -> Unit,
+    onToggleLike: () -> Unit,
+) {
     when {
         loadingState.isLoading -> {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -93,7 +129,7 @@ fun PlayerScreen(
                     Text("播放錯誤", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.error)
                     Text(loadingState.error!!, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Button(onClick = { viewModel.retry() }) { Text("重試") }
+                        Button(onClick = onRetry) { Text("重試") }
                         Button(onClick = onBack) { Text("返回") }
                     }
                 }
@@ -252,7 +288,7 @@ fun PlayerScreen(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Button(onClick = { viewModel.toggleShuffle() }) {
+                            Button(onClick = onToggleShuffle) {
                                 Icon(
                                     Icons.Default.Shuffle,
                                     "隨機播放",
@@ -260,12 +296,12 @@ fun PlayerScreen(
                                 )
                             }
                             Button(
-                                onClick = { viewModel.skipPrevious() },
+                                onClick = onSkipPrevious,
                                 enabled = playbackState.hasPrevious || playbackState.positionMs > 3000,
                             ) {
                                 Icon(Icons.Default.SkipPrevious, "上一首")
                             }
-                            Button(onClick = { viewModel.togglePlayPause() }) {
+                            Button(onClick = onTogglePlayPause) {
                                 Icon(
                                     if (playbackState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                                     if (playbackState.isPlaying) "暫停" else "播放",
@@ -273,12 +309,12 @@ fun PlayerScreen(
                                 )
                             }
                             Button(
-                                onClick = { viewModel.skipNext() },
+                                onClick = onSkipNext,
                                 enabled = playbackState.hasNext,
                             ) {
                                 Icon(Icons.Default.SkipNext, "下一首")
                             }
-                            Button(onClick = { viewModel.toggleRepeatMode() }) {
+                            Button(onClick = onToggleRepeatMode) {
                                 Icon(
                                     when (playbackState.repeatMode) {
                                         RepeatMode.ONE -> Icons.Default.RepeatOne
@@ -289,7 +325,7 @@ fun PlayerScreen(
                                 )
                             }
                             if (isLoggedIn) {
-                                Button(onClick = { viewModel.toggleLike() }) {
+                                Button(onClick = onToggleLike) {
                                     Icon(
                                         if (isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                                         if (isLiked) "取消喜歡" else "喜歡",

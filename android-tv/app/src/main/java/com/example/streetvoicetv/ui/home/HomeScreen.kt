@@ -54,6 +54,31 @@ fun HomeScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
+    HomeContent(
+        uiState = uiState,
+        isLoggedIn = isLoggedIn,
+        profileImageUrl = profileImageUrl,
+        onSongSelected = onSongSelected,
+        onPlaylistSelected = onPlaylistSelected,
+        onSearchTap = onSearchTap,
+        onLoginTap = onLoginTap,
+        onMyPageTap = onMyPageTap,
+    )
+}
+
+/** Stateless home content (testable without Hilt / network). */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun HomeContent(
+    uiState: HomeUiState,
+    isLoggedIn: Boolean,
+    profileImageUrl: String?,
+    onSongSelected: (Song, List<Song>) -> Unit,
+    onPlaylistSelected: (Playlist) -> Unit,
+    onSearchTap: () -> Unit,
+    onLoginTap: () -> Unit,
+    onMyPageTap: () -> Unit,
+) {
     Column(modifier = Modifier.fillMaxSize()) {
         // Top bar: search + account
         Row(

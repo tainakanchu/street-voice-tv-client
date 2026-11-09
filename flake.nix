@@ -27,7 +27,7 @@
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
             # Java
-            jdk17
+            jdk21
 
             # Node.js (research scripts)
             nodejs_22
@@ -40,7 +40,7 @@
           ];
 
           shellHook = ''
-            export JAVA_HOME="${pkgs.jdk17.home}"
+            export JAVA_HOME="${pkgs.jdk21.home}"
             export ANDROID_HOME="${androidSdk}/share/android-sdk"
             export ANDROID_SDK_ROOT="$ANDROID_HOME"
             export PATH="$ANDROID_HOME/platform-tools:$PATH"
