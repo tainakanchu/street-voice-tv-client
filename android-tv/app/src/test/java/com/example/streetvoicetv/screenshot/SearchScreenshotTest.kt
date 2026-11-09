@@ -12,6 +12,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import com.example.streetvoicetv.ui.search.SearchContent
 import com.example.streetvoicetv.ui.search.SearchUiState
+import com.example.streetvoicetv.ui.common.UserMessages
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -77,7 +78,7 @@ class SearchScreenshotTest {
 
     @Test
     fun search_error() = compose.captureTv("search_error") {
-        Search(SearchUiState(query = "周杰倫", error = "Unable to resolve host \"streetvoice.com\": No address associated with hostname"))
+        Search(SearchUiState(query = "周杰倫", error = UserMessages.NETWORK))
     }
 
     @Test

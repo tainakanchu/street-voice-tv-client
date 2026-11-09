@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.example.streetvoicetv.domain.model.Album
 import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.domain.repository.StreetVoiceRepository
+import com.example.streetvoicetv.ui.common.UserMessages
+import com.example.streetvoicetv.ui.common.userMessageFor
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,7 +31,7 @@ class AlbumViewModel @Inject constructor(
         if (albumId > 0) {
             load()
         } else {
-            _uiState.value = AlbumUiState(error = "Invalid album ID")
+            _uiState.value = AlbumUiState(error = UserMessages.NOT_FOUND)
         }
     }
 
@@ -54,7 +56,7 @@ class AlbumViewModel @Inject constructor(
                 .onFailure { error ->
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        error = "Failed to load album: ${error.message}",
+                        error = userMessageFor(TAG, error),
                     )
                 }
         }
@@ -62,6 +64,10 @@ class AlbumViewModel @Inject constructor(
 
     fun retry() {
         if (albumId > 0) load()
+    }
+
+    private companion object {
+        const val TAG = "AlbumViewModel"
     }
 }
 

@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.compose.ui.test.junit4.createComposeRule
 import com.example.streetvoicetv.ui.home.HomeContent
 import com.example.streetvoicetv.ui.home.HomeUiState
+import com.example.streetvoicetv.ui.common.UserMessages
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -92,6 +93,27 @@ class HomeScreenshotTest {
         nowPlaying = FakeData.playbackLong,
     ) {
         Home(defaultState, isLoggedIn = true)
+    }
+
+    @Test
+    fun home_error() = compose.captureTv("home_error") {
+        Home(HomeUiState(error = UserMessages.TIMEOUT))
+    }
+
+    @Test
+    fun home_long_with_now_playing_long() = compose.captureTv(
+        "home_long_with_now_playing_long",
+        nowPlaying = FakeData.playbackLong,
+    ) {
+        Home(
+            HomeUiState(
+                chartSongs = FakeData.longSongs,
+                editorPicks = FakeData.longSongs.reversed(),
+                playlists = FakeData.longPlaylists,
+                myPlaylists = FakeData.longPlaylists.take(5),
+            ),
+            isLoggedIn = true,
+        )
     }
 
     @androidx.compose.runtime.Composable

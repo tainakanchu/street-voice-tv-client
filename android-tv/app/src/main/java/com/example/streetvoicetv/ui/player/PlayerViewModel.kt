@@ -7,6 +7,8 @@ import com.example.streetvoicetv.data.auth.SessionManager
 import com.example.streetvoicetv.domain.repository.StreetVoiceRepository
 import com.example.streetvoicetv.playback.PlaybackManager
 import com.example.streetvoicetv.playback.PlaybackState
+import com.example.streetvoicetv.ui.common.UserMessages
+import com.example.streetvoicetv.ui.common.userMessageFor
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -46,7 +48,7 @@ class PlayerViewModel @Inject constructor(
                 loadSongAndPlay(songId)
             }
         } else {
-            _loadingState.value = PlayerLoadingState(error = "Invalid song ID")
+            _loadingState.value = PlayerLoadingState(error = UserMessages.NOT_FOUND)
         }
 
         // キュー内で曲が切り替わったときに isLiked を更新する
@@ -70,7 +72,7 @@ class PlayerViewModel @Inject constructor(
             val songResult = repository.getSongDetail(songId)
             val song = songResult.getOrElse { error ->
                 _loadingState.value = PlayerLoadingState(
-                    error = "Failed to load song: ${error.message}",
+                    error = userMessageFor(TAG, error, UserMessages.PLAYBACK_FAILED),
                 )
                 return@launch
             }
@@ -78,7 +80,7 @@ class PlayerViewModel @Inject constructor(
             val streamResult = repository.getStreamUrl(songId)
             val stream = streamResult.getOrElse { error ->
                 _loadingState.value = PlayerLoadingState(
-                    error = "Failed to load stream: ${error.message}",
+                    error = userMessageFor(TAG, error, UserMessages.PLAYBACK_FAILED),
                 )
                 return@launch
             }
@@ -134,6 +136,10 @@ class PlayerViewModel @Inject constructor(
 
     fun retry() {
         if (songId > 0) loadSongAndPlay(songId)
+    }
+
+    private companion object {
+        const val TAG = "PlayerViewModel"
     }
 }
 

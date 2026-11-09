@@ -2,7 +2,9 @@ package com.example.streetvoicetv.screenshot
 
 import android.app.Application
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.performScrollToIndex
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -66,6 +68,18 @@ class PlaylistScreenshotTest {
         nowPlaying = FakeData.playbackLong,
     ) {
         Playlist(PlaylistUiState(playlist = FakeData.playlists[0], songs = FakeData.songs))
+    }
+
+    /** The last song must stay visible above the NowPlayingBar when scrolled to the end. */
+    @Test
+    fun playlist_scrolled_to_end_with_now_playing() = compose.captureTv(
+        "playlist_scrolled_to_end_with_now_playing",
+        nowPlaying = FakeData.playbackLong,
+        beforeCapture = {
+            onNode(hasScrollToIndexAction()).performScrollToIndex(FakeData.longSongs.size)
+        },
+    ) {
+        Playlist(PlaylistUiState(playlist = FakeData.longPlaylists[0], songs = FakeData.longSongs))
     }
 
     @Composable

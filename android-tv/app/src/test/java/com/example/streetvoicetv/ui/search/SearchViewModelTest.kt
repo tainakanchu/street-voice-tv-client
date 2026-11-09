@@ -1,5 +1,6 @@
 package com.example.streetvoicetv.ui.search
 
+import com.example.streetvoicetv.ui.common.UserMessages
 import android.app.Application
 import com.example.streetvoicetv.data.SearchHistoryManager
 import com.example.streetvoicetv.domain.model.Song
@@ -63,7 +64,7 @@ class SearchViewModelTest {
 
         vm.onQueryChange("lofi")
         vm.search()
-        assertEquals("offline", vm.uiState.value.error)
+        assertEquals(UserMessages.SEARCH_FAILED, vm.uiState.value.error)
 
         vm.clearError()
         assertNull(vm.uiState.value.error)

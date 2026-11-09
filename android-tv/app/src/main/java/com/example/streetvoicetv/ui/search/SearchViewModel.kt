@@ -7,6 +7,8 @@ import com.example.streetvoicetv.domain.model.Artist
 import com.example.streetvoicetv.domain.model.Playlist
 import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.domain.repository.StreetVoiceRepository
+import com.example.streetvoicetv.ui.common.UserMessages
+import com.example.streetvoicetv.ui.common.userMessageFor
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -65,7 +67,7 @@ class SearchViewModel @Inject constructor(
 
             val error = when {
                 songsResult.isFailure && artistsResult.isFailure && playlistsResult.isFailure ->
-                    songsResult.exceptionOrNull()?.message ?: "Search failed"
+                    userMessageFor(TAG, songsResult.exceptionOrNull(), UserMessages.SEARCH_FAILED)
                 else -> null
             }
 
@@ -81,6 +83,10 @@ class SearchViewModel @Inject constructor(
 
     fun clearError() {
         _uiState.value = _uiState.value.copy(error = null)
+    }
+
+    private companion object {
+        const val TAG = "SearchViewModel"
     }
 }
 

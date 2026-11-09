@@ -55,6 +55,14 @@ class ComponentsScreenshotTest {
     }
 
     @Test
+    fun components_list_items_focused_artist() = compose.captureTv(
+        "components_list_items_focused_artist",
+        beforeCapture = { focusOnText(FakeData.longArtists[0].displayName) },
+    ) {
+        ListItems(long = true)
+    }
+
+    @Test
     fun components_now_playing_bar() = compose.captureTv("components_now_playing_bar") {
         Column(
             Modifier.padding(48.dp),

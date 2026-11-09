@@ -23,6 +23,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.example.streetvoicetv.data.auth.SessionManager
+import com.example.streetvoicetv.ui.theme.Dimens
 
 private const val LOGIN_URL = "https://streetvoice.com/accounts/login/"
 private const val BASE_URL = "https://streetvoice.com"
@@ -108,9 +109,14 @@ fun LoginContent(
         // Header
         Text(
             text = "登入 StreetVoice（完成後請按返回鍵）",
-            style = MaterialTheme.typography.titleSmall,
+            style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 48.dp, vertical = 12.dp),
+            modifier = Modifier.padding(
+                start = Dimens.SafeHorizontal,
+                end = Dimens.SafeHorizontal,
+                top = Dimens.SafeVertical,
+                bottom = 12.dp,
+            ),
         )
 
         if (isLoading) {
@@ -118,7 +124,7 @@ fun LoginContent(
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 48.dp),
+                    .padding(horizontal = Dimens.SafeHorizontal),
             )
         }
 

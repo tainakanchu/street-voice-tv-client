@@ -7,6 +7,8 @@ import com.example.streetvoicetv.domain.model.Album
 import com.example.streetvoicetv.domain.model.Artist
 import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.domain.repository.StreetVoiceRepository
+import com.example.streetvoicetv.ui.common.UserMessages
+import com.example.streetvoicetv.ui.common.userMessageFor
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,7 +32,7 @@ class ArtistViewModel @Inject constructor(
         if (username.isNotBlank()) {
             load()
         } else {
-            _uiState.value = ArtistUiState(error = "Invalid artist")
+            _uiState.value = ArtistUiState(error = UserMessages.NOT_FOUND)
         }
     }
 
@@ -58,7 +60,7 @@ class ArtistViewModel @Inject constructor(
                 .onFailure { error ->
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        error = "Failed to load artist: ${error.message}",
+                        error = userMessageFor(TAG, error),
                     )
                 }
         }
@@ -70,6 +72,10 @@ class ArtistViewModel @Inject constructor(
 
     fun selectTab(tab: ArtistTab) {
         _uiState.value = _uiState.value.copy(selectedTab = tab)
+    }
+
+    private companion object {
+        const val TAG = "ArtistViewModel"
     }
 }
 

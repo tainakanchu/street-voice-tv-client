@@ -3,7 +3,6 @@ package com.example.streetvoicetv.ui.artist
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,20 +12,21 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.tv.material3.Button
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Tab
@@ -36,7 +36,13 @@ import coil.compose.AsyncImage
 import com.example.streetvoicetv.domain.model.Album
 import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.ui.components.AlbumListItem
+import com.example.streetvoicetv.ui.components.MessageAction
+import com.example.streetvoicetv.ui.components.MessageState
 import com.example.streetvoicetv.ui.components.SongListItem
+import com.example.streetvoicetv.ui.components.initialFocus
+import com.example.streetvoicetv.ui.components.rememberInitialFocus
+import com.example.streetvoicetv.ui.theme.LocalBottomOverlayInset
+import com.example.streetvoicetv.ui.theme.screenListPadding
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -59,7 +65,7 @@ fun ArtistScreen(
 }
 
 /** Stateless artist content (testable without Hilt / network). */
-@OptIn(ExperimentalTvMaterial3Api::class)
+@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun ArtistContent(
     uiState: ArtistUiState,
@@ -69,6 +75,7 @@ fun ArtistContent(
     onBack: () -> Unit,
     onSelectTab: (ArtistTab) -> Unit,
 ) {
+    val bottomInset = LocalBottomOverlayInset.current
     when {
         uiState.isLoading -> {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -77,159 +84,152 @@ fun ArtistContent(
         }
 
         uiState.error != null && uiState.artist == null -> {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    Text(
-                        text = uiState.error!!,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Button(onClick = onRetry) { Text("重試") }
-                        Button(onClick = onBack) { Text("返回") }
-                    }
-                }
-            }
+            MessageState(
+                title = "無法載入音樂人",
+                message = uiState.error,
+                isError = true,
+                primaryAction = MessageAction("重試", onRetry),
+                secondaryAction = MessageAction("返回", onBack),
+                modifier = Modifier.padding(bottom = bottomInset),
+            )
         }
 
         uiState.artist != null -> {
-            val artist = uiState.artist!!
+            val artist = uiState.artist
+            val firstItemFocus = rememberInitialFocus()
+            val tabs = ArtistTab.entries.toList()
+            val selectedIndex = tabs.indexOf(uiState.selectedTab)
 
-            Column(modifier = Modifier.fillMaxSize()) {
-                // Artist header
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 48.dp, end = 48.dp, top = 32.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    AsyncImage(
-                        model = artist.profileImageUrl,
-                        contentDescription = artist.displayName,
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .focusRestorer(),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                contentPadding = screenListPadding(bottomInset),
+            ) {
+                // Header + tabs scroll away with the list.
+                item(key = "header") {
+                    Row(
                         modifier = Modifier
-                            .size(96.dp)
-                            .clip(CircleShape),
-                        contentScale = ContentScale.Crop,
-                    )
-
-                    Spacer(modifier = Modifier.width(20.dp))
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = artist.displayName,
-                            style = MaterialTheme.typography.headlineMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        AsyncImage(
+                            model = artist.profileImageUrl,
+                            contentDescription = artist.displayName,
+                            modifier = Modifier
+                                .size(96.dp)
+                                .clip(CircleShape),
+                            contentScale = ContentScale.Crop,
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+
+                        Spacer(modifier = Modifier.width(20.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "${artist.songsCount} 首歌曲",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Text(
-                                text = "粉絲 ${artist.followersCount}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        if (!artist.introduction.isNullOrBlank()) {
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = artist.introduction,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 2,
+                                text = artist.displayName,
+                                style = MaterialTheme.typography.headlineMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Tab row
-                val tabs = ArtistTab.entries.toList()
-                val selectedIndex = tabs.indexOf(uiState.selectedTab)
-
-                TabRow(
-                    selectedTabIndex = selectedIndex,
-                    modifier = Modifier.padding(horizontal = 48.dp),
-                ) {
-                    tabs.forEachIndexed { index, tab ->
-                        Tab(
-                            selected = index == selectedIndex,
-                            onFocus = { onSelectTab(tab) },
-                        ) {
-                            Text(
-                                text = when (tab) {
-                                    ArtistTab.Songs -> "歌曲 (${uiState.songs.size})"
-                                    ArtistTab.Albums -> "專輯 (${uiState.albums.size})"
-                                },
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Tab content
-                when (uiState.selectedTab) {
-                    ArtistTab.Songs -> {
-                        if (uiState.songs.isEmpty()) {
-                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                                 Text(
-                                    text = "沒有歌曲",
+                                    text = "${artist.songsCount} 首歌曲",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Text(
+                                    text = "粉絲 ${artist.followersCount}",
+                                    style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
-                        } else {
-                            LazyColumn(
-                                modifier = Modifier.fillMaxSize(),
-                                verticalArrangement = Arrangement.spacedBy(4.dp),
-                                contentPadding = PaddingValues(horizontal = 48.dp, vertical = 8.dp),
+                            if (!artist.introduction.isNullOrBlank()) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = artist.introduction,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                item(key = "tabs") {
+                    TabRow(
+                        selectedTabIndex = selectedIndex,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    ) {
+                        tabs.forEachIndexed { index, tab ->
+                            Tab(
+                                selected = index == selectedIndex,
+                                onFocus = { onSelectTab(tab) },
                             ) {
-                                items(uiState.songs, key = { it.id }) { song ->
-                                    SongListItem(
-                                        song = song,
-                                        onClick = { onSongSelected(song, uiState.songs) },
-                                    )
-                                }
+                                Text(
+                                    text = when (tab) {
+                                        ArtistTab.Songs -> "歌曲 (${uiState.songs.size})"
+                                        ArtistTab.Albums -> "專輯 (${uiState.albums.size})"
+                                    },
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+
+                when (uiState.selectedTab) {
+                    ArtistTab.Songs -> {
+                        if (uiState.songs.isEmpty()) {
+                            item(key = "empty_songs") { EmptyTab("沒有歌曲") }
+                        } else {
+                            itemsIndexed(uiState.songs, key = { _, it -> "song_${it.id}" }) { index, song ->
+                                SongListItem(
+                                    song = song,
+                                    onClick = { onSongSelected(song, uiState.songs) },
+                                    modifier = Modifier.initialFocus(firstItemFocus, enabled = index == 0),
+                                )
                             }
                         }
                     }
 
                     ArtistTab.Albums -> {
                         if (uiState.albums.isEmpty()) {
-                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Text(
-                                    text = "沒有專輯",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
+                            item(key = "empty_albums") { EmptyTab("沒有專輯") }
                         } else {
-                            LazyColumn(
-                                modifier = Modifier.fillMaxSize(),
-                                verticalArrangement = Arrangement.spacedBy(4.dp),
-                                contentPadding = PaddingValues(horizontal = 48.dp, vertical = 8.dp),
-                            ) {
-                                items(uiState.albums, key = { it.id }) { album ->
-                                    AlbumListItem(
-                                        album = album,
-                                        onClick = { onAlbumSelected(album) },
-                                    )
-                                }
+                            itemsIndexed(uiState.albums, key = { _, it -> "album_${it.id}" }) { index, album ->
+                                AlbumListItem(
+                                    album = album,
+                                    onClick = { onAlbumSelected(album) },
+                                    modifier = Modifier.initialFocus(firstItemFocus, enabled = index == 0),
+                                )
                             }
                         }
                     }
                 }
             }
         }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun EmptyTab(text: String) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = 64.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }

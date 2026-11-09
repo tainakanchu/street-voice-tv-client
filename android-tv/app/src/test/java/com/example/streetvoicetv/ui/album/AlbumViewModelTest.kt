@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import com.example.streetvoicetv.domain.model.Album
 import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.testutil.FakeStreetVoiceRepository
+import com.example.streetvoicetv.ui.common.UserMessages
 import com.example.streetvoicetv.testutil.MainDispatcherRule
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -45,7 +46,7 @@ class AlbumViewModelTest {
         repository.albumSongsResult = Result.success(songs)
 
         val vm = AlbumViewModel(repository, SavedStateHandle(mapOf("albumId" to 1)))
-        assertEquals("Failed to load album: boom", vm.uiState.value.error)
+        assertEquals(UserMessages.LOAD_FAILED, vm.uiState.value.error)
         assertNull(vm.uiState.value.album)
 
         repository.albumDetailResult = Result.success(album)
@@ -57,7 +58,7 @@ class AlbumViewModelTest {
     @Test
     fun `invalid id does not hit repository`() {
         val vm = AlbumViewModel(repository, SavedStateHandle())
-        assertEquals("Invalid album ID", vm.uiState.value.error)
+        assertEquals(UserMessages.NOT_FOUND, vm.uiState.value.error)
         assertTrue(repository.calls.isEmpty())
     }
 }

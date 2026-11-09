@@ -6,6 +6,8 @@ import com.example.streetvoicetv.data.auth.SessionManager
 import com.example.streetvoicetv.domain.model.Playlist
 import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.domain.repository.StreetVoiceRepository
+import com.example.streetvoicetv.ui.common.UserMessages
+import com.example.streetvoicetv.ui.common.userMessageFor
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -53,10 +55,21 @@ class HomeViewModel @Inject constructor(
                 }
             }
 
-            val chart = chartDeferred.await().getOrDefault(emptyList())
-            val editor = editorDeferred.await().getOrDefault(emptyList())
-            val playlists = playlistsDeferred.await().getOrDefault(emptyList())
-            val myPlaylists = myPlaylistsDeferred?.await()?.getOrDefault(emptyList()) ?: emptyList()
+            val chartResult = chartDeferred.await()
+            val editorResult = editorDeferred.await()
+            val playlistsResult = playlistsDeferred.await()
+            val myPlaylistsResult = myPlaylistsDeferred?.await()
+
+            val chart = chartResult.getOrDefault(emptyList())
+            val editor = editorResult.getOrDefault(emptyList())
+            val playlists = playlistsResult.getOrDefault(emptyList())
+            val myPlaylists = myPlaylistsResult?.getOrDefault(emptyList()) ?: emptyList()
+
+            // Only surface an error when nothing at all could be shown.
+            val nothingLoaded = chart.isEmpty() && editor.isEmpty() && playlists.isEmpty() && myPlaylists.isEmpty()
+            val firstFailure = listOfNotNull(chartResult, editorResult, playlistsResult, myPlaylistsResult)
+                .firstNotNullOfOrNull { it.exceptionOrNull() }
+            val error = if (nothingLoaded && firstFailure != null) userMessageFor(TAG, firstFailure) else null
 
             _uiState.value = _uiState.value.copy(
                 isLoading = false,
@@ -64,11 +77,16 @@ class HomeViewModel @Inject constructor(
                 editorPicks = editor,
                 playlists = playlists,
                 myPlaylists = myPlaylists,
+                error = error,
             )
         }
     }
 
     fun retry() = load()
+
+    private companion object {
+        const val TAG = "HomeViewModel"
+    }
 }
 
 data class HomeUiState(

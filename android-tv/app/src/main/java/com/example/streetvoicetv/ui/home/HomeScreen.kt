@@ -11,11 +11,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
@@ -23,22 +21,34 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import com.example.streetvoicetv.domain.model.Playlist
 import com.example.streetvoicetv.domain.model.Song
+import com.example.streetvoicetv.ui.components.CardRowVerticalPadding
+import com.example.streetvoicetv.ui.components.MessageAction
+import com.example.streetvoicetv.ui.components.MessageState
+import com.example.streetvoicetv.ui.components.PlaylistCard
+import com.example.streetvoicetv.ui.components.SongCard
+import com.example.streetvoicetv.ui.components.InitialFocus
+import com.example.streetvoicetv.ui.components.initialFocus
+import com.example.streetvoicetv.ui.components.rememberInitialFocus
+import com.example.streetvoicetv.ui.theme.Dimens
+import com.example.streetvoicetv.ui.theme.LocalBottomOverlayInset
 
-private val ScreenHPadding = 48.dp
+private val ScreenHPadding = Dimens.SafeHorizontal
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -63,6 +73,7 @@ fun HomeScreen(
         onSearchTap = onSearchTap,
         onLoginTap = onLoginTap,
         onMyPageTap = onMyPageTap,
+        onRetry = { viewModel.retry() },
     )
 }
 
@@ -78,25 +89,32 @@ fun HomeContent(
     onSearchTap: () -> Unit,
     onLoginTap: () -> Unit,
     onMyPageTap: () -> Unit,
+    onRetry: () -> Unit = {},
 ) {
+    val bottomInset = LocalBottomOverlayInset.current
+    val firstItemFocus = rememberInitialFocus()
+    val hasContent = uiState.chartSongs.isNotEmpty() || uiState.editorPicks.isNotEmpty() ||
+        uiState.myPlaylists.isNotEmpty() || uiState.playlists.isNotEmpty()
+
     Column(modifier = Modifier.fillMaxSize()) {
         // Top bar: search + account
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = ScreenHPadding, end = ScreenHPadding, top = 32.dp),
+                .padding(start = ScreenHPadding, end = ScreenHPadding, top = Dimens.SafeVertical),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Surface(
                 onClick = onSearchTap,
                 shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                scale = ClickableSurfaceDefaults.scale(focusedScale = 1.02f),
                 modifier = Modifier.weight(1f),
             ) {
                 Text(
                     text = "搜尋歌曲與音樂人...",
                     style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = LocalContentColor.current.copy(alpha = 0.7f),
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                 )
             }
@@ -123,64 +141,88 @@ fun HomeContent(
                 ) {
                     Text(
                         text = "登入",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
                     )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
-        if (uiState.isLoading) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+        when {
+            uiState.isLoading -> {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                }
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(24.dp),
-                contentPadding = PaddingValues(bottom = 32.dp),
-            ) {
-                if (uiState.chartSongs.isNotEmpty()) {
-                    item {
-                        SongCarouselSection(
-                            title = "即時排行",
-                            songs = uiState.chartSongs,
-                            onSongSelected = onSongSelected,
-                            showRank = true,
-                        )
-                    }
-                }
 
-                if (uiState.editorPicks.isNotEmpty()) {
-                    item {
-                        SongCarouselSection(
-                            title = "推薦單曲",
-                            songs = uiState.editorPicks,
-                            onSongSelected = onSongSelected,
-                        )
-                    }
-                }
+            !hasContent -> {
+                MessageState(
+                    title = if (uiState.error != null) "無法載入首頁" else null,
+                    message = uiState.error ?: "目前沒有可顯示的內容",
+                    isError = uiState.error != null,
+                    primaryAction = MessageAction("重試", onRetry),
+                    modifier = Modifier.padding(bottom = bottomInset),
+                )
+            }
 
-                if (uiState.myPlaylists.isNotEmpty()) {
-                    item {
-                        PlaylistSection(
-                            title = "我的歌單",
-                            playlists = uiState.myPlaylists,
-                            onPlaylistSelected = onPlaylistSelected,
-                        )
-                    }
+            else -> {
+                // The first section's first card gets the initial focus.
+                val firstSection = when {
+                    uiState.chartSongs.isNotEmpty() -> 0
+                    uiState.editorPicks.isNotEmpty() -> 1
+                    uiState.myPlaylists.isNotEmpty() -> 2
+                    else -> 3
                 }
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(top = 4.dp, bottom = Dimens.SafeVertical + bottomInset),
+                ) {
+                    if (uiState.chartSongs.isNotEmpty()) {
+                        item(key = "chart") {
+                            SongCarouselSection(
+                                title = "即時排行",
+                                songs = uiState.chartSongs,
+                                onSongSelected = onSongSelected,
+                                showRank = true,
+                                firstItemFocus = firstItemFocus.takeIf { firstSection == 0 },
+                            )
+                        }
+                    }
 
-                if (uiState.playlists.isNotEmpty()) {
-                    item {
-                        PlaylistSection(
-                            title = "歌單",
-                            playlists = uiState.playlists,
-                            onPlaylistSelected = onPlaylistSelected,
-                        )
+                    if (uiState.editorPicks.isNotEmpty()) {
+                        item(key = "editor") {
+                            SongCarouselSection(
+                                title = "推薦單曲",
+                                songs = uiState.editorPicks,
+                                onSongSelected = onSongSelected,
+                                firstItemFocus = firstItemFocus.takeIf { firstSection == 1 },
+                            )
+                        }
+                    }
+
+                    if (uiState.myPlaylists.isNotEmpty()) {
+                        item(key = "my_playlists") {
+                            PlaylistSection(
+                                title = "我的歌單",
+                                playlists = uiState.myPlaylists,
+                                onPlaylistSelected = onPlaylistSelected,
+                                firstItemFocus = firstItemFocus.takeIf { firstSection == 2 },
+                            )
+                        }
+                    }
+
+                    if (uiState.playlists.isNotEmpty()) {
+                        item(key = "playlists") {
+                            PlaylistSection(
+                                title = "歌單",
+                                playlists = uiState.playlists,
+                                onPlaylistSelected = onPlaylistSelected,
+                                firstItemFocus = firstItemFocus.takeIf { firstSection == 3 },
+                            )
+                        }
                     }
                 }
             }
@@ -189,149 +231,65 @@ fun HomeContent(
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun SectionTitle(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = ScreenHPadding),
+    )
+}
+
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun SongCarouselSection(
     title: String,
     songs: List<Song>,
     onSongSelected: (Song, List<Song>) -> Unit,
     showRank: Boolean = false,
+    firstItemFocus: InitialFocus? = null,
 ) {
     Column {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(start = ScreenHPadding, bottom = 8.dp),
-        )
-
+        SectionTitle(title)
         LazyRow(
+            modifier = Modifier.focusRestorer(),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(horizontal = ScreenHPadding),
+            contentPadding = PaddingValues(horizontal = ScreenHPadding, vertical = CardRowVerticalPadding),
         ) {
             itemsIndexed(songs, key = { _, song -> song.id }) { index, song ->
                 SongCard(
                     song = song,
                     rank = if (showRank) index + 1 else null,
                     onClick = { onSongSelected(song, songs) },
+                    modifier = Modifier.initialFocus(firstItemFocus, enabled = index == 0),
                 )
             }
         }
     }
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun SongCard(
-    song: Song,
-    rank: Int?,
-    onClick: () -> Unit,
-) {
-    Surface(
-        onClick = onClick,
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
-        modifier = Modifier.width(150.dp),
-    ) {
-        Column {
-            Box {
-                AsyncImage(
-                    model = song.imageUrl,
-                    contentDescription = song.name,
-                    modifier = Modifier
-                        .size(150.dp)
-                        .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)),
-                    contentScale = ContentScale.Crop,
-                )
-                if (rank != null) {
-                    Text(
-                        text = "#$rank",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(6.dp),
-                    )
-                }
-            }
-            Column(modifier = Modifier.padding(8.dp)) {
-                Text(
-                    text = song.name,
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = song.artistName,
-                    style = MaterialTheme.typography.labelSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun PlaylistSection(
     title: String,
     playlists: List<Playlist>,
     onPlaylistSelected: (Playlist) -> Unit,
+    firstItemFocus: InitialFocus? = null,
 ) {
     Column {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(start = ScreenHPadding, bottom = 8.dp),
-        )
-
+        SectionTitle(title)
         LazyRow(
+            modifier = Modifier.focusRestorer(),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(horizontal = ScreenHPadding),
+            contentPadding = PaddingValues(horizontal = ScreenHPadding, vertical = CardRowVerticalPadding),
         ) {
-            items(playlists, key = { it.id }) { playlist ->
+            itemsIndexed(playlists, key = { _, it -> it.id }) { index, playlist ->
                 PlaylistCard(
                     playlist = playlist,
                     onClick = { onPlaylistSelected(playlist) },
+                    modifier = Modifier.initialFocus(firstItemFocus, enabled = index == 0),
                 )
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun PlaylistCard(
-    playlist: Playlist,
-    onClick: () -> Unit,
-) {
-    Surface(
-        onClick = onClick,
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
-        modifier = Modifier.width(180.dp),
-    ) {
-        Column {
-            AsyncImage(
-                model = playlist.imageUrl,
-                contentDescription = playlist.name,
-                modifier = Modifier
-                    .size(180.dp, 120.dp)
-                    .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)),
-                contentScale = ContentScale.Crop,
-            )
-            Column(modifier = Modifier.padding(8.dp)) {
-                Text(
-                    text = playlist.name,
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (playlist.curatorName != null) {
-                    Text(
-                        text = playlist.curatorName,
-                        style = MaterialTheme.typography.labelSmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
             }
         }
     }

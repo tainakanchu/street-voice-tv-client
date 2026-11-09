@@ -69,8 +69,30 @@ class MyPageScreenshotTest {
         MyPage(MyPageUiState(profile = FakeData.artists[0], likedSongs = FakeData.songs, playlists = FakeData.playlists))
     }
 
+    @Test
+    fun mypage_logout_confirm() = compose.captureTv("mypage_logout_confirm") {
+        MyPage(
+            MyPageUiState(profile = FakeData.artists[0], likedSongs = FakeData.songs, playlists = FakeData.playlists),
+            showLogoutConfirm = true,
+        )
+    }
+
+    @Test
+    fun mypage_focused_liked_song() = compose.captureTv(
+        "mypage_focused_liked_song",
+        beforeCapture = { focusOnText(FakeData.longSongs[0].name) },
+    ) {
+        MyPage(MyPageUiState(profile = FakeData.longArtists[0], likedSongs = FakeData.longSongs, playlists = emptyList()))
+    }
+
     @Composable
-    private fun MyPage(state: MyPageUiState) {
-        MyPageContent(uiState = state, onSongSelected = { _, _ -> }, onPlaylistSelected = {}, onLogout = {})
+    private fun MyPage(state: MyPageUiState, showLogoutConfirm: Boolean = false) {
+        MyPageContent(
+            uiState = state,
+            onSongSelected = { _, _ -> },
+            onPlaylistSelected = {},
+            onLogout = {},
+            initialShowLogoutConfirm = showLogoutConfirm,
+        )
     }
 }
