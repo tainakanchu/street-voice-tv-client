@@ -62,7 +62,7 @@ class PlayerDpadTest {
                     onSkipNext = { calls += "next" },
                     onToggleRepeatMode = { calls += "repeat" },
                     onToggleLike = { calls += "like" },
-                    onSeek = { seeks += it },
+                    onSeekBy = { seeks += it },
                     lyricsScrollState = lyricsScroll,
                 )
             }
@@ -101,12 +101,12 @@ class PlayerDpadTest {
         compose.assertFocusedTag(SEEK_BAR_TAG)
         compose.captureDpad("player_seek_bar")
 
-        val pos = FakeData.playbackPlaying.positionMs
+        // Relative seeks: PlaybackManager.seekBy accumulates them on the latest target.
         compose.dpad(Dpad.Left)
         compose.assertFocusedTag(SEEK_BAR_TAG)
         compose.dpad(Dpad.Right)
         compose.assertFocusedTag(SEEK_BAR_TAG)
-        assertEquals(listOf(pos - 10_000, pos + 10_000), seeks)
+        assertEquals(listOf(-10_000L, 10_000L), seeks)
 
         // Down returns to the control we came from, not the one under the bar's centre.
         compose.dpad(Dpad.Down)
