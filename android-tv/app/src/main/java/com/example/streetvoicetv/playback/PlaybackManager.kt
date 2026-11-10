@@ -94,6 +94,16 @@ class PlaybackManager internal constructor(
         .map { NowPlaying(it.song, it.isPlaying, it.error) }
         .stateIn(scope, SharingStarted.Eagerly, NowPlaying())
 
+    private val _upNext = MutableStateFlow(queue.view())
+    private var upNextRevision = queue.revision
+
+    /**
+     * The queue in play order (shuffle / repeat applied) with the current position. Changes only
+     * when the queue, the current song or the shuffle / repeat mode changes — never on position
+     * ticks or play / pause.
+     */
+    val upNext: StateFlow<QueueView> = _upNext.asStateFlow()
+
     /** Player handed to the MediaSession: routes next / previous / play to the queue logic. */
     val sessionPlayer: Player by lazy { QueueForwardingPlayer(engine.asPlayer(), this) }
 
@@ -197,6 +207,23 @@ class PlaybackManager internal constructor(
             loadCurrent(startPositionMs = 0, newPlay = true)
         } else {
             seekTo(0)
+        }
+    }
+
+    /**
+     * Jumps to the queue song at [queueIndex] (a [QueueItem.queueIndex]) without rebuilding the
+     * queue (the shuffled order is kept). Selecting the current song resumes it if it is paused,
+     * ended or failed instead of restarting it.
+     */
+    fun playQueueItem(queueIndex: Int) {
+        if (queueIndex !in 0 until queue.size) return
+        if (queueIndex == queue.currentIndex) {
+            if (!_state.value.isPlaying) resume()
+            return
+        }
+        if (queue.jumpTo(queueIndex)) {
+            retryCount = 0
+            loadCurrent(startPositionMs = 0, newPlay = true)
         }
     }
 
@@ -438,6 +465,10 @@ class PlaybackManager internal constructor(
             nextAvailable = queue.hasNext,
             previousAvailable = queue.hasPrevious,
         )
+        if (queue.revision != upNextRevision) {
+            upNextRevision = queue.revision
+            _upNext.value = queue.view()
+        }
     }
 
     companion object {
