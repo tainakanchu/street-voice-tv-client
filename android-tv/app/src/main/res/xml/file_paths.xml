@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
-    <cache-path name="apk" path="." />
+    <!-- Only the downloaded update APK (UpdateChecker.UPDATES_DIR); nothing else in cacheDir. -->
+    <cache-path name="updates" path="updates/" />
 </paths>

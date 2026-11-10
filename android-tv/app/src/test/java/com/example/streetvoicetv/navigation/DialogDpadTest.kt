@@ -148,6 +148,24 @@ class DialogDpadTest {
         compose.assertFocusedText(FakeData.songs[0].name)
     }
 
+    @Test
+    fun readyToInstall_installFocused_backDismisses() {
+        setHomeWithUpdateDialog()
+        updateState = UpdateState.ReadyToInstall(java.io.File("app.apk"), autoLaunch = false, installerLaunched = true)
+        compose.waitForIdle()
+        compose.assertFocused(hasText("安裝"))
+        compose.dpad(Dpad.Left)
+        compose.assertFocused(hasText("關閉"))
+        for (key in all) {
+            compose.dpad(key, times = 2)
+            compose.assertFocused(hasText("安裝") or hasText("關閉"))
+        }
+        // Not a dead end when the installer was cancelled: Back closes the dialog.
+        compose.dpad(Dpad.Back)
+        assertEquals(1, dismisses)
+        compose.assertFocusedText(FakeData.songs[0].name)
+    }
+
     // ------------------------------------------------------------ MessageState
 
     @Test

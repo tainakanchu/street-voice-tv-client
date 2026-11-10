@@ -42,6 +42,15 @@ class UpdateDialogScreenshotTest {
     fun update_ready_to_install() = capture("update_ready_to_install", UpdateState.ReadyToInstall(File("app.apk")))
 
     @Test
+    fun update_ready_to_install_needs_permission() = capture(
+        "update_ready_to_install_needs_permission",
+        UpdateState.ReadyToInstall(File("app.apk"), autoLaunch = false, needsPermission = true),
+    )
+
+    @Test
+    fun update_install_error() = capture("update_install_error", UpdateState.Error("No Activity found", isInstallError = true))
+
+    @Test
     fun update_error() = capture("update_error", UpdateState.Error("Download failed: HTTP 404"))
 
     @Test
