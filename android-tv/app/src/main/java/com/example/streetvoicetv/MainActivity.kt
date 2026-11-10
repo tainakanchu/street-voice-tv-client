@@ -1,6 +1,7 @@
 package com.example.streetvoicetv
 
 import android.app.Activity
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -11,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,6 +24,7 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -56,6 +57,8 @@ import com.example.streetvoicetv.ui.theme.LocalBottomOverlayInset
 import com.example.streetvoicetv.ui.theme.StreetVoiceTvTheme
 import com.example.streetvoicetv.ui.update.UpdateDialog
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -67,7 +70,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        updateChecker.checkForUpdate()
+        // Delayed so it does not compete with the first screen's API calls; no-op unless the
+        // update state is Idle, and throttled / ETag-cached inside UpdateChecker.
+        updateChecker.checkForUpdate(initialDelayMs = UPDATE_CHECK_DELAY_MS)
         setContent {
             StreetVoiceTvTheme {
                 StreetVoiceTvApp(playbackManager, sessionManager, updateChecker, this)
@@ -76,7 +81,27 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private const val PLAYER_ROUTE = "player/{songId}"
+private const val UPDATE_CHECK_DELAY_MS = 5_000L
+
+internal const val PLAYER_ROUTE = "player/{songId}"
+
+/** Route builders. String arguments are Uri-encoded ("a/b", "#x", "50%" stay one argument). */
+internal object Routes {
+    fun player(songId: Int) = "player/$songId"
+    fun artist(username: String) = "artist/${Uri.encode(username)}"
+    fun album(albumId: Int) = "album/$albumId"
+    fun playlist(playlistId: Int) = "playlist/$playlistId"
+
+    /**
+     * Only an existing player on top of the back stack is replaced (so a new song does not
+     * stack players). A player deeper in the stack (home → player → artist) is left alone:
+     * popping up to it would also drop the screens above it.
+     */
+    fun shouldReplacePlayer(currentRoute: String?): Boolean = currentRoute == PLAYER_ROUTE
+}
+
+/** What the app root needs from playback (not the position, which ticks every 500ms). */
+private data class NowPlaying(val song: Song?, val isPlaying: Boolean)
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -87,26 +112,39 @@ fun StreetVoiceTvApp(
     activity: Activity,
 ) {
     val navController = rememberNavController()
-    val playbackState by playbackManager.state.collectAsState()
-    val isLoggedIn by sessionManager.isLoggedIn.collectAsState()
-    val profileImageUrl by sessionManager.profileImageUrl.collectAsState()
-    val updateState by updateChecker.state.collectAsState()
+    // The root only needs what the NowPlayingBar shows (song, playing / paused): collecting the
+    // whole PlaybackState would recompose the app chrome on every position tick.
+    val nowPlayingFlow = remember(playbackManager) {
+        playbackManager.state
+            .map { NowPlaying(it.song, it.isPlaying) }
+            .distinctUntilChanged()
+    }
+    val nowPlaying by nowPlayingFlow.collectAsStateWithLifecycle(
+        initialValue = NowPlaying(playbackManager.state.value.song, playbackManager.state.value.isPlaying),
+    )
+    val isLoggedIn by sessionManager.isLoggedIn.collectAsStateWithLifecycle()
+    val profileImageUrl by sessionManager.profileImageUrl.collectAsStateWithLifecycle()
+    val updateState by updateChecker.state.collectAsStateWithLifecycle()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
-    // auto-launch installer when download completes
-    if (updateState is UpdateState.ReadyToInstall) {
-        updateChecker.installApk(activity)
+    // Launch the installer once when a download completes (not on every recomposition).
+    // Afterwards the dialog offers 安裝 / 關閉, so a cancelled installer is not a dead end.
+    LaunchedEffect(updateState) {
+        val state = updateState
+        if (state is UpdateState.ReadyToInstall && state.autoLaunch) {
+            updateChecker.installApk(activity)
+        }
     }
 
-    val showNowPlaying = playbackState.hasMedia
+    val showNowPlaying = nowPlaying.song != null
         && currentRoute?.startsWith("player") != true
         && currentRoute != "login"
 
-    // Replace any player already on the back stack instead of stacking duplicates.
     fun navigateToPlayer(songId: Int) {
-        navController.navigate("player/$songId") {
-            popUpTo(PLAYER_ROUTE) { inclusive = true }
+        val replace = Routes.shouldReplacePlayer(navController.currentDestination?.route)
+        navController.navigate(Routes.player(songId)) {
+            if (replace) popUpTo(PLAYER_ROUTE) { inclusive = true }
             launchSingleTop = true
         }
     }
@@ -117,17 +155,23 @@ fun StreetVoiceTvApp(
         navigateToPlayer(selected.id)
     }
 
+    val barState = remember(nowPlaying) {
+        PlaybackState(song = nowPlaying.song, isPlaying = nowPlaying.isPlaying)
+    }
+
     AppScaffold(
-        playbackState = playbackState,
+        playbackState = barState,
         showNowPlaying = showNowPlaying,
         onNowPlayingTap = {
-            val songId = playbackState.song?.id
+            // Read at click time instead of capturing a (possibly stale) state.
+            val songId = playbackManager.state.value.song?.id
             if (songId != null) navigateToPlayer(songId)
         },
         onTogglePlayPause = { playbackManager.togglePlayPause() },
         updateState = updateState,
         onUpdate = { updateChecker.downloadAndInstall() },
         onDismissUpdate = { updateChecker.dismiss() },
+        onInstallUpdate = { updateChecker.installApk(activity) },
     ) {
         NavHost(
             navController = navController,
@@ -138,7 +182,7 @@ fun StreetVoiceTvApp(
                 HomeScreen(
                     onSongSelected = { song, allSongs -> playSongInList(allSongs, song) },
                     onPlaylistSelected = { playlist ->
-                        navController.navigate("playlist/${playlist.id}")
+                        navController.navigate(Routes.playlist(playlist.id))
                     },
                     onSearchTap = { navController.navigate("search") },
                     onLoginTap = { navController.navigate("login") },
@@ -150,7 +194,6 @@ fun StreetVoiceTvApp(
 
             composable("login") {
                 LoginScreen(
-                    sessionManager = sessionManager,
                     onLoginSuccess = { navController.popBackStack() },
                     onBack = { navController.popBackStack() },
                 )
@@ -160,10 +203,10 @@ fun StreetVoiceTvApp(
                 SearchScreen(
                     onSongSelected = { song, allSongs -> playSongInList(allSongs, song) },
                     onArtistSelected = { artist ->
-                        navController.navigate("artist/${artist.username}")
+                        navController.navigate(Routes.artist(artist.username))
                     },
                     onPlaylistSelected = { playlist ->
-                        navController.navigate("playlist/${playlist.id}")
+                        navController.navigate(Routes.playlist(playlist.id))
                     },
                 )
             }
@@ -175,7 +218,7 @@ fun StreetVoiceTvApp(
                 PlayerScreen(
                     onBack = { navController.popBackStack() },
                     onArtistSelected = { username ->
-                        navController.navigate("artist/$username")
+                        navController.navigate(Routes.artist(username))
                     },
                 )
             }
@@ -186,7 +229,7 @@ fun StreetVoiceTvApp(
             ) {
                 ArtistScreen(
                     onSongSelected = { song, allSongs -> playSongInList(allSongs, song) },
-                    onAlbumSelected = { album -> navController.navigate("album/${album.id}") },
+                    onAlbumSelected = { album -> navController.navigate(Routes.album(album.id)) },
                     onBack = { navController.popBackStack() },
                 )
             }
@@ -205,9 +248,12 @@ fun StreetVoiceTvApp(
                 MyPageScreen(
                     onSongSelected = { song, allSongs -> playSongInList(allSongs, song) },
                     onPlaylistSelected = { playlist ->
-                        navController.navigate("playlist/${playlist.id}")
+                        navController.navigate(Routes.playlist(playlist.id))
                     },
                     onLoggedOut = { navController.popBackStack("home", inclusive = false) },
+                    onRelogin = {
+                        navController.navigate("login") { popUpTo("home") }
+                    },
                     onBack = { navController.popBackStack() },
                 )
             }
@@ -244,6 +290,7 @@ fun AppScaffold(
     updateState: UpdateState,
     onUpdate: () -> Unit,
     onDismissUpdate: () -> Unit,
+    onInstallUpdate: () -> Unit = {},
     content: @Composable () -> Unit,
 ) {
     val nowPlayingVisible = showNowPlaying && playbackState.song != null
@@ -314,6 +361,7 @@ fun AppScaffold(
                 state = updateState,
                 onUpdate = onUpdate,
                 onDismiss = onDismissUpdate,
+                onInstall = onInstallUpdate,
             )
         }
     }
