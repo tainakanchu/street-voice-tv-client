@@ -20,7 +20,7 @@
           build-tools-35-0-0
           cmdline-tools-latest
           platform-tools
-          platforms-android-35
+          platforms-android-36
         ]);
       in
       {

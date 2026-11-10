@@ -58,7 +58,7 @@ An unofficial client for listening to [StreetVoice](https://streetvoice.com) mus
 
 - [Nix](https://nixos.org/download/) (推薦 recommended) 或 or:
   - JDK 21 (tests require 21; app bytecode targets 17)
-  - Android SDK (Platform 35, Build Tools 35)
+  - Android SDK (Platform 36, Build Tools 35)
   - Node.js 22+ (僅調查腳本 for research scripts only)
 
 ### 使用 Nix
