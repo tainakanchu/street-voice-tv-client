@@ -31,6 +31,13 @@ jobs:
       - name: Decode keystore
         run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ${{ github.workspace }}/release.keystore
 
+      - name: Derive version from tag
+        run: |
+          VERSION_NAME="${GITHUB_REF_NAME#v}"
+          IFS=. read -r MAJOR MINOR PATCH <<< "${VERSION_NAME%%-*}"
+          echo "VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=$(( MAJOR * 10000 + MINOR * 100 + PATCH ))" >> "$GITHUB_ENV"
+
       - name: Build release APK
         env:
           KEYSTORE_FILE: ${{ github.workspace }}/release.keystore

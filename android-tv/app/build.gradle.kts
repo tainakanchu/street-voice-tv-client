@@ -26,8 +26,9 @@ android {
         applicationId = "com.example.streetvoicetv"
         minSdk = 28
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        // CI (tag push v1.2.3) から VERSION_NAME / VERSION_CODE を受け取る。ローカルは既定値。
+        versionName = System.getenv("VERSION_NAME") ?: "0.1.0"
+        versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 1
 
         buildConfigField("String", "STREETVOICE_BASE_URL", "\"https://streetvoice.com\"")
     }
