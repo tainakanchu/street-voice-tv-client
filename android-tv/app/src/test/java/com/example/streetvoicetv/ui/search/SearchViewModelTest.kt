@@ -6,6 +6,8 @@ import com.example.streetvoicetv.data.SearchHistoryManager
 import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.testutil.FakeStreetVoiceRepository
 import com.example.streetvoicetv.testutil.MainDispatcherRule
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -68,5 +70,39 @@ class SearchViewModelTest {
 
         vm.clearError()
         assertNull(vm.uiState.value.error)
+    }
+
+    @Test
+    fun `a newer search cancels the older one so stale results never show`() {
+        val slow = CompletableDeferred<Result<List<Song>>>()
+        var slowCancelled = false
+        repository.onSearchSongs = { query ->
+            if (query == "old") {
+                try {
+                    slow.await()
+                } catch (e: CancellationException) {
+                    slowCancelled = true
+                    throw e
+                }
+            } else {
+                Result.success(listOf(song))
+            }
+        }
+        repository.searchArtistsResult = Result.success(emptyList())
+        repository.searchPlaylistsResult = Result.success(emptyList())
+
+        vm.onQueryChange("old")
+        vm.search()
+        assertTrue(vm.uiState.value.isLoading)
+
+        vm.onQueryChange("new")
+        vm.search()
+        assertTrue(slowCancelled)
+        assertEquals(listOf(song), vm.uiState.value.songs)
+
+        // Even if the old request completes late, nothing changes.
+        slow.complete(Result.success(listOf(song.copy(id = 99, name = "stale"))))
+        assertEquals(listOf(song), vm.uiState.value.songs)
+        assertFalse(vm.uiState.value.isLoading)
     }
 }

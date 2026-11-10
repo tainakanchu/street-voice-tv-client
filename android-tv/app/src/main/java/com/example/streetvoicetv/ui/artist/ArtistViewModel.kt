@@ -10,6 +10,7 @@ import com.example.streetvoicetv.domain.repository.StreetVoiceRepository
 import com.example.streetvoicetv.ui.common.UserMessages
 import com.example.streetvoicetv.ui.common.userMessageFor
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -36,10 +37,13 @@ class ArtistViewModel @Inject constructor(
         }
     }
 
+    private var loadJob: Job? = null
+
     private fun load() {
         _uiState.value = _uiState.value.copy(isLoading = true, error = null)
 
-        viewModelScope.launch {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             val detailDeferred = async { repository.getArtistDetail(username) }
             val songsDeferred = async { repository.getArtistSongs(username) }
             val albumsDeferred = async { repository.getArtistAlbums(username) }
@@ -55,6 +59,9 @@ class ArtistViewModel @Inject constructor(
                         artist = artist,
                         songs = songsResult.getOrDefault(emptyList()),
                         albums = albumsResult.getOrDefault(emptyList()),
+                        // Partial failures are shown inline instead of as an empty list.
+                        songsError = songsResult.exceptionOrNull()?.let { userMessageFor(TAG, it) },
+                        albumsError = albumsResult.exceptionOrNull()?.let { userMessageFor(TAG, it) },
                     )
                 }
                 .onFailure { error ->
@@ -86,6 +93,8 @@ data class ArtistUiState(
     val artist: Artist? = null,
     val songs: List<Song> = emptyList(),
     val albums: List<Album> = emptyList(),
+    val songsError: String? = null,
+    val albumsError: String? = null,
     val selectedTab: ArtistTab = ArtistTab.Songs,
     val error: String? = null,
 )

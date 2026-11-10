@@ -10,6 +10,7 @@ import com.example.streetvoicetv.domain.repository.StreetVoiceRepository
 import com.example.streetvoicetv.ui.common.UserMessages
 import com.example.streetvoicetv.ui.common.userMessageFor
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -41,6 +42,12 @@ class SearchViewModel @Inject constructor(
         searchHistoryManager.remove(query)
     }
 
+    /** The running search; a new search cancels it so stale results never arrive. */
+    private var searchJob: Job? = null
+
+    /** Query whose results are (being) shown; bumps on every search. */
+    private var activeQuery: String? = null
+
     fun search() {
         val query = _uiState.value.query.trim()
         if (query.isBlank()) return
@@ -52,7 +59,9 @@ class SearchViewModel @Inject constructor(
             error = null,
         )
 
-        viewModelScope.launch {
+        searchJob?.cancel()
+        activeQuery = query
+        searchJob = viewModelScope.launch {
             val songsDeferred = async { repository.searchSongs(query) }
             val artistsDeferred = async { repository.searchArtists(query) }
             val playlistsDeferred = async { repository.searchPlaylists(query) }
@@ -71,6 +80,8 @@ class SearchViewModel @Inject constructor(
                 else -> null
             }
 
+            // Belt and braces: only apply results of the latest search.
+            if (activeQuery != query) return@launch
             _uiState.value = _uiState.value.copy(
                 isLoading = false,
                 songs = songs,
