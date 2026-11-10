@@ -1,15 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Background circle -->
-    <path
-        android:fillColor="#FFF5565C"
-        android:pathData="M54,54m-40,0a40,40 0,1 1,80 0a40,40 0,1 1,-80 0" />
-    <!-- Music note icon -->
+    <!-- Vanishing Road: a play triangle that is also a road receding to the horizon.
+         Content stays inside the 66dp safe circle. -->
+    <!-- Play triangle / road surface -->
+    <path android:pathData="M39.33,33.25Q39.33,29 43.03,31.1L79.64,51.9Q83.33,54 79.64,56.1L43.03,76.9Q39.33,79 39.33,74.75Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="39.33" android:startY="29" android:endX="83.33" android:endY="79">
+                <item android:offset="0" android:color="#FFFF7A7F" />
+                <item android:offset="1" android:color="#FFE23F46" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Perspective centre-line dashes -->
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M60,30v28c-1.5,-1.2 -3.5,-2 -6,-2c-4.4,0 -8,3.6 -8,8s3.6,8 8,8s8,-3.6 8,-8V38h8v-8H60z" />
+        android:pathData="M39.33,49.75L52.53,51.02L52.53,56.98L39.33,58.25ZM58.19,51.57L63.14,52.05L63.14,55.95L58.19,56.43ZM66.46,52.37L69.17,52.63L69.17,55.37L66.46,55.63ZM71.49,52.86L73.23,53.02L73.23,54.98L71.49,55.14Z" />
 </vector>
