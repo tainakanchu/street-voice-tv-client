@@ -41,6 +41,7 @@ import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.playback.PlaybackManager
 import com.example.streetvoicetv.playback.PlaybackState
 import com.example.streetvoicetv.ui.album.AlbumScreen
+import com.example.streetvoicetv.ui.common.PlayAllMode
 import com.example.streetvoicetv.ui.artist.ArtistScreen
 import com.example.streetvoicetv.ui.components.BlockFocusEntry
 import com.example.streetvoicetv.ui.components.NowPlayingBar
@@ -139,10 +140,24 @@ fun StreetVoiceTvApp(
         }
     }
 
+    // The queue is the list as shown: for paginated lists, only the songs loaded so far
+    // (the rest is not fetched just to fill the queue).
     fun playSongInList(songs: List<Song>, selected: Song) {
         val index = songs.indexOfFirst { it.id == selected.id }.coerceAtLeast(0)
         playbackManager.setQueue(songs, index)
         navigateToPlayer(selected.id)
+    }
+
+    // 播放全部 / 隨機播放. The screens hand over the songs loaded so far plus the remaining
+    // pages up to PLAY_ALL_CAP. In order: shuffle off, start at the first song. Shuffle:
+    // shuffle on, start at a random song (the queue shuffles the rest around it).
+    fun playAll(songs: List<Song>, mode: PlayAllMode) {
+        if (songs.isEmpty()) return
+        val shuffle = mode == PlayAllMode.Shuffle
+        if (playbackManager.state.value.shuffleEnabled != shuffle) playbackManager.toggleShuffle()
+        val index = if (shuffle) songs.indices.random() else 0
+        playbackManager.playQueue(songs, index)
+        navigateToPlayer(songs[index].id)
     }
 
     val barState = remember(nowPlaying) {
@@ -219,6 +234,7 @@ fun StreetVoiceTvApp(
             ) {
                 ArtistScreen(
                     onSongSelected = { song, allSongs -> playSongInList(allSongs, song) },
+                    onPlayAll = ::playAll,
                     onAlbumSelected = { album -> navController.navigate(Routes.album(album.id)) },
                     onBack = { navController.popBackStack() },
                 )
@@ -230,6 +246,7 @@ fun StreetVoiceTvApp(
             ) {
                 AlbumScreen(
                     onSongSelected = { song, allSongs -> playSongInList(allSongs, song) },
+                    onPlayAll = ::playAll,
                     onBack = { navController.popBackStack() },
                 )
             }
@@ -237,6 +254,7 @@ fun StreetVoiceTvApp(
             composable("mypage") {
                 MyPageScreen(
                     onSongSelected = { song, allSongs -> playSongInList(allSongs, song) },
+                    onPlayAll = ::playAll,
                     onPlaylistSelected = { playlist ->
                         navController.navigate(Routes.playlist(playlist.id))
                     },
@@ -254,6 +272,7 @@ fun StreetVoiceTvApp(
             ) {
                 PlaylistScreen(
                     onSongSelected = { song, allSongs -> playSongInList(allSongs, song) },
+                    onPlayAll = ::playAll,
                     onBack = { navController.popBackStack() },
                 )
             }

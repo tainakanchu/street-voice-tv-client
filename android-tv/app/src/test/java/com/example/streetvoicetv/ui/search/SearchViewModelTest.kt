@@ -3,6 +3,7 @@ package com.example.streetvoicetv.ui.search
 import com.example.streetvoicetv.ui.common.UserMessages
 import android.app.Application
 import com.example.streetvoicetv.data.SearchHistoryManager
+import com.example.streetvoicetv.domain.model.Page
 import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.testutil.FakeStreetVoiceRepository
 import com.example.streetvoicetv.testutil.MainDispatcherRule
@@ -104,5 +105,34 @@ class SearchViewModelTest {
         slow.complete(Result.success(listOf(song.copy(id = 99, name = "stale"))))
         assertEquals(listOf(song), vm.uiState.value.songs)
         assertFalse(vm.uiState.value.isLoading)
+    }
+
+    @Test
+    fun `songs load more, and a new search drops the pending page of the old one`() {
+        val stale = CompletableDeferred<Result<Page<Song>>>()
+        val first = List(20) { Song(it, "歌 $it", "a", "a", null, 1.0, 0) }
+        repository.searchSongs = { offset, _ ->
+            if (offset == 0) Result.success(Page(first, 100, 20)) else stale.await()
+        }
+        repository.searchArtistsResult = Result.success(emptyList())
+        repository.searchPlaylistsResult = Result.success(emptyList())
+
+        vm.onQueryChange("lofi")
+        vm.search()
+        assertEquals(1, vm.uiState.value.resultsGeneration)
+        assertTrue(vm.uiState.value.songsLoadMore.canLoadMore)
+
+        vm.loadMoreSongs()
+        assertTrue("searchSongs(lofi, offset=20)" in repository.calls)
+        assertTrue(vm.uiState.value.songsLoadMore.isLoadingMore)
+
+        vm.onQueryChange("jazz")
+        vm.search()
+        stale.complete(Result.success(Page(listOf(Song(999, "stale", "a", "a", null, 1.0, 0)), 100, null)))
+
+        val state = vm.uiState.value
+        assertEquals(first, state.songs)
+        assertFalse(state.songsLoadMore.isLoadingMore)
+        assertEquals(2, state.resultsGeneration)
     }
 }
