@@ -14,26 +14,31 @@ class SearchHistoryManager @Inject constructor(
 ) {
     private val prefs = context.getSharedPreferences("search_history", Context.MODE_PRIVATE)
 
+    private val lock = Any()
+
     private val _history = MutableStateFlow(loadHistory())
     val history: StateFlow<List<String>> = _history.asStateFlow()
 
     fun add(query: String) {
         val trimmed = query.trim()
         if (trimmed.isBlank()) return
-        val current = _history.value.toMutableList()
-        current.remove(trimmed)
-        current.add(0, trimmed)
-        val updated = current.take(MAX_HISTORY)
-        prefs.edit().putStringSet(KEY, updated.toSet())
-            .putString(KEY_ORDERED, updated.joinToString(SEPARATOR))
-            .apply()
-        _history.value = updated
+        update { current -> (listOf(trimmed) + current.filter { it != trimmed }).take(MAX_HISTORY) }
     }
 
     fun remove(query: String) {
-        val updated = _history.value.filter { it != query }
-        prefs.edit().putString(KEY_ORDERED, updated.joinToString(SEPARATOR)).apply()
-        _history.value = updated
+        update { current -> current.filter { it != query } }
+    }
+
+    /** Read-modify-write under a lock so concurrent add/remove calls cannot lose entries. */
+    private fun update(transform: (List<String>) -> List<String>) {
+        synchronized(lock) {
+            val updated = transform(_history.value)
+            prefs.edit()
+                .putString(KEY_ORDERED, updated.joinToString(SEPARATOR))
+                .remove(LEGACY_KEY_SET) // unused unordered copy written by older versions
+                .apply()
+            _history.value = updated
+        }
     }
 
     private fun loadHistory(): List<String> {
@@ -42,7 +47,7 @@ class SearchHistoryManager @Inject constructor(
     }
 
     companion object {
-        private const val KEY = "history_set"
+        private const val LEGACY_KEY_SET = "history_set"
         private const val KEY_ORDERED = "history_ordered"
         private const val SEPARATOR = "\u001F"
         private const val MAX_HISTORY = 20

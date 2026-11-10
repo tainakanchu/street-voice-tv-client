@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+ (API 31+). The login session (cookies / CSRF token) must never leave the
+     device: it is excluded from cloud backup and device-to-device transfer. Search history
+     and other preferences are still backed up. Keep in sync with backup_rules.xml. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="streetvoice_session.xml" />
+        <!-- WebView login cookies -->
+        <exclude domain="root" path="app_webview/" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="streetvoice_session.xml" />
+        <!-- WebView login cookies -->
+        <exclude domain="root" path="app_webview/" />
+    </device-transfer>
+</data-extraction-rules>

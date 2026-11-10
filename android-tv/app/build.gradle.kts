@@ -100,6 +100,15 @@ roborazzi {
     outputDir.set(file("src/test/screenshots"))
 }
 
+// Compose compiler stability / skippability reports: ./gradlew assembleRelease -PcomposeReports=true
+// → app/build/compose_compiler/{reports,metrics}
+if (providers.gradleProperty("composeReports").orNull == "true") {
+    composeCompiler {
+        reportsDestination = layout.buildDirectory.dir("compose_compiler/reports")
+        metricsDestination = layout.buildDirectory.dir("compose_compiler/metrics")
+    }
+}
+
 dependencies {
     // Compose BOM
     val composeBom = platform(libs.compose.bom)
@@ -152,6 +161,7 @@ dependencies {
     testImplementation(libs.robolectric)
     robolectricAndroidAll(libs.robolectric.android.all)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.okhttp.mockwebserver)
     testImplementation(composeBom)
     testImplementation(libs.compose.ui.test.junit4)
     testImplementation(libs.roborazzi)
