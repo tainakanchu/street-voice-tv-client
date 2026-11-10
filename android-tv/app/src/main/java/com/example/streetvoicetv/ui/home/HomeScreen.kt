@@ -1,5 +1,6 @@
 package com.example.streetvoicetv.ui.home
 
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.material3.ClickableSurfaceDefaults
@@ -43,12 +45,16 @@ import com.example.streetvoicetv.ui.components.MessageState
 import com.example.streetvoicetv.ui.components.PlaylistCard
 import com.example.streetvoicetv.ui.components.SongCard
 import com.example.streetvoicetv.ui.components.InitialFocus
+import com.example.streetvoicetv.ui.components.focusRoot
 import com.example.streetvoicetv.ui.components.initialFocus
 import com.example.streetvoicetv.ui.components.rememberInitialFocus
 import com.example.streetvoicetv.ui.theme.Dimens
 import com.example.streetvoicetv.ui.theme.LocalBottomOverlayInset
 
 private val ScreenHPadding = Dimens.SafeHorizontal
+
+/** Test tags of the home sections (rows): chart, editor, my_playlists, playlists. */
+fun homeSectionTag(key: String) = "home_section_$key"
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -96,7 +102,12 @@ fun HomeContent(
     val hasContent = uiState.chartSongs.isNotEmpty() || uiState.editorPicks.isNotEmpty() ||
         uiState.myPlaylists.isNotEmpty() || uiState.playlists.isNotEmpty()
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .focusRoot(firstItemFocus)
+            .focusGroup(),
+    ) {
         // Top bar: search + account
         Row(
             modifier = Modifier
@@ -176,7 +187,12 @@ fun HomeContent(
                     else -> 3
                 }
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
+                    // Remembers the focused row, so returning (from the top bar or the
+                    // NowPlayingBar) lands on the row - and, via the row's own restorer, the card -
+                    // that was focused before.
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .focusRestorer(),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(top = 4.dp, bottom = Dimens.SafeVertical + bottomInset),
                 ) {
@@ -184,6 +200,7 @@ fun HomeContent(
                         item(key = "chart") {
                             SongCarouselSection(
                                 title = "即時排行",
+                                tag = homeSectionTag("chart"),
                                 songs = uiState.chartSongs,
                                 onSongSelected = onSongSelected,
                                 showRank = true,
@@ -196,6 +213,7 @@ fun HomeContent(
                         item(key = "editor") {
                             SongCarouselSection(
                                 title = "推薦單曲",
+                                tag = homeSectionTag("editor"),
                                 songs = uiState.editorPicks,
                                 onSongSelected = onSongSelected,
                                 firstItemFocus = firstItemFocus.takeIf { firstSection == 1 },
@@ -207,6 +225,7 @@ fun HomeContent(
                         item(key = "my_playlists") {
                             PlaylistSection(
                                 title = "我的歌單",
+                                tag = homeSectionTag("my_playlists"),
                                 playlists = uiState.myPlaylists,
                                 onPlaylistSelected = onPlaylistSelected,
                                 firstItemFocus = firstItemFocus.takeIf { firstSection == 2 },
@@ -218,6 +237,7 @@ fun HomeContent(
                         item(key = "playlists") {
                             PlaylistSection(
                                 title = "歌單",
+                                tag = homeSectionTag("playlists"),
                                 playlists = uiState.playlists,
                                 onPlaylistSelected = onPlaylistSelected,
                                 firstItemFocus = firstItemFocus.takeIf { firstSection == 3 },
@@ -247,10 +267,11 @@ private fun SongCarouselSection(
     title: String,
     songs: List<Song>,
     onSongSelected: (Song, List<Song>) -> Unit,
+    tag: String,
     showRank: Boolean = false,
     firstItemFocus: InitialFocus? = null,
 ) {
-    Column {
+    Column(Modifier.testTag(tag)) {
         SectionTitle(title)
         LazyRow(
             modifier = Modifier.focusRestorer(),
@@ -275,9 +296,10 @@ private fun PlaylistSection(
     title: String,
     playlists: List<Playlist>,
     onPlaylistSelected: (Playlist) -> Unit,
+    tag: String,
     firstItemFocus: InitialFocus? = null,
 ) {
-    Column {
+    Column(Modifier.testTag(tag)) {
         SectionTitle(title)
         LazyRow(
             modifier = Modifier.focusRestorer(),

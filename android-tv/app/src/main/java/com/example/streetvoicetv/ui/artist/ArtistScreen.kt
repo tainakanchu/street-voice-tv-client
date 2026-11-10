@@ -1,5 +1,6 @@
 package com.example.streetvoicetv.ui.artist
 
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,9 +19,13 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
@@ -39,6 +44,7 @@ import com.example.streetvoicetv.ui.components.AlbumListItem
 import com.example.streetvoicetv.ui.components.MessageAction
 import com.example.streetvoicetv.ui.components.MessageState
 import com.example.streetvoicetv.ui.components.SongListItem
+import com.example.streetvoicetv.ui.components.focusRoot
 import com.example.streetvoicetv.ui.components.initialFocus
 import com.example.streetvoicetv.ui.components.rememberInitialFocus
 import com.example.streetvoicetv.ui.theme.LocalBottomOverlayInset
@@ -99,11 +105,16 @@ fun ArtistContent(
             val firstItemFocus = rememberInitialFocus()
             val tabs = ArtistTab.entries.toList()
             val selectedIndex = tabs.indexOf(uiState.selectedTab)
+            val tabFocus = remember { tabs.map { FocusRequester() } }
+            val selectedListEmpty = when (uiState.selectedTab) {
+                ArtistTab.Songs -> uiState.songs.isEmpty()
+                ArtistTab.Albums -> uiState.albums.isEmpty()
+            }
 
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .focusRestorer(),
+                    .focusRoot(firstItemFocus),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
                 contentPadding = screenListPadding(bottomInset),
             ) {
@@ -164,12 +175,22 @@ fun ArtistContent(
                 item(key = "tabs") {
                     TabRow(
                         selectedTabIndex = selectedIndex,
-                        modifier = Modifier.padding(bottom = 8.dp),
+                        modifier = Modifier
+                            .padding(bottom = 8.dp)
+                            // Entering the tab row (e.g. Up from the list) lands on the selected
+                            // tab. Otherwise the geometrically nearest tab would get focus and,
+                            // since focusing a tab selects it, switch the list underneath.
+                            .focusProperties { enter = { tabFocus[selectedIndex] } }
+                            .focusGroup(),
                     ) {
                         tabs.forEachIndexed { index, tab ->
                             Tab(
                                 selected = index == selectedIndex,
                                 onFocus = { onSelectTab(tab) },
+                                modifier = Modifier
+                                    .focusRequester(tabFocus[index])
+                                    // Nothing to focus in an empty tab: start on the tab itself.
+                                    .initialFocus(firstItemFocus, enabled = index == selectedIndex && selectedListEmpty),
                             ) {
                                 Text(
                                     text = when (tab) {

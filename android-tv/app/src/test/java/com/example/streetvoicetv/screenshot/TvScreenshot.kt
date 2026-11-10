@@ -72,23 +72,45 @@ fun ComposeContentTestRule.captureTv(
     content: @Composable () -> Unit,
 ) {
     setContent {
-        StreetVoiceTvTheme {
-            AppScaffold(
-                playbackState = nowPlaying,
-                showNowPlaying = nowPlaying.hasMedia,
-                onNowPlayingTap = {},
-                onTogglePlayPause = {},
-                updateState = updateState,
-                onUpdate = {},
-                onDismissUpdate = {},
-                content = content,
-            )
-        }
+        TvChrome(nowPlaying = nowPlaying, updateState = updateState, content = content)
     }
     waitForIdle()
     beforeCapture()
     waitForIdle()
+    captureTvImage(name)
+}
+
+/** Captures the whole window as `app/src/test/screenshots/<name>.png`. */
+fun ComposeContentTestRule.captureTvImage(name: String) {
     onRoot().captureRoboImage("$name.png", roborazziOptions = TvRoborazziOptions)
+}
+
+/**
+ * The real app chrome ([AppScaffold] + theme) around [content], as in MainActivity.
+ * The NowPlayingBar is shown whenever [nowPlaying] has media.
+ */
+@Composable
+fun TvChrome(
+    nowPlaying: PlaybackState = PlaybackState(),
+    updateState: UpdateState = UpdateState.Idle,
+    onNowPlayingTap: () -> Unit = {},
+    onTogglePlayPause: () -> Unit = {},
+    onUpdate: () -> Unit = {},
+    onDismissUpdate: () -> Unit = {},
+    content: @Composable () -> Unit,
+) {
+    StreetVoiceTvTheme {
+        AppScaffold(
+            playbackState = nowPlaying,
+            showNowPlaying = nowPlaying.hasMedia,
+            onNowPlayingTap = onNowPlayingTap,
+            onTogglePlayPause = onTogglePlayPause,
+            updateState = updateState,
+            onUpdate = onUpdate,
+            onDismissUpdate = onDismissUpdate,
+            content = content,
+        )
+    }
 }
 
 /**

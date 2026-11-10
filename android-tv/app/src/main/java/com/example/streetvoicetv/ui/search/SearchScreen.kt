@@ -1,5 +1,6 @@
 package com.example.streetvoicetv.ui.search
 
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,11 +26,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.text.style.TextOverflow
@@ -52,6 +57,9 @@ import com.example.streetvoicetv.ui.components.PlaylistListItem
 import com.example.streetvoicetv.ui.components.MessageAction
 import com.example.streetvoicetv.ui.components.MessageState
 import com.example.streetvoicetv.ui.components.SongListItem
+import com.example.streetvoicetv.ui.components.focusRoot
+import com.example.streetvoicetv.ui.components.initialFocus
+import com.example.streetvoicetv.ui.components.rememberInitialFocus
 import com.example.streetvoicetv.ui.components.requestFocusWhenReady
 import com.example.streetvoicetv.ui.theme.Dimens
 import com.example.streetvoicetv.ui.theme.LocalBottomOverlayInset
@@ -98,8 +106,18 @@ fun SearchContent(
     onPlaylistSelected: (Playlist) -> Unit,
 ) {
     val bottomInset = LocalBottomOverlayInset.current
+    // The text field gets the initial focus unless results / an error claim it.
+    val textFieldFocus = rememberInitialFocus()
+    val showHistory = !uiState.isLoading && uiState.error == null && !uiState.hasResults &&
+        !(uiState.isEmpty && uiState.query.isNotBlank()) && searchHistory.isNotEmpty()
+    val firstChipFocus = remember { FocusRequester() }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .focusRoot(textFieldFocus)
+            .focusGroup(),
+    ) {
         Text(
             text = "StreetVoice",
             style = MaterialTheme.typography.headlineLarge,
@@ -119,7 +137,15 @@ fun SearchContent(
             OutlinedTextField(
                 value = uiState.query,
                 onValueChange = onQueryChange,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .initialFocus(
+                        textFieldFocus,
+                        enabled = !uiState.hasResults && uiState.error == null,
+                    )
+                    // Down goes to the first history chip, not to whichever chip happens
+                    // to lie under the centre of the wide text field.
+                    .focusProperties { if (showHistory) down = firstChipFocus },
                 placeholder = {
                     androidx.compose.material3.Text("搜尋歌曲、音樂人與歌單...", color = Color.Gray)
                 },
@@ -223,9 +249,15 @@ fun SearchContent(
                     }
                 }
 
-                // Move focus to the first result whenever a new result set arrives.
-                LaunchedEffect(uiState.artists, uiState.playlists, uiState.songs) {
-                    firstResultFocus.requestFocusWhenReady()
+                // Move focus to the first result whenever a new result set arrives - but not when
+                // the same results are shown again after Back (focusRoot restores focus then).
+                val resultsKey = listOf(uiState.artists, uiState.playlists, uiState.songs).hashCode()
+                var focusedResultsKey by rememberSaveable { mutableStateOf<Int?>(null) }
+                LaunchedEffect(resultsKey) {
+                    if (focusedResultsKey != resultsKey) {
+                        focusedResultsKey = resultsKey
+                        firstResultFocus.requestFocusWhenReady()
+                    }
                 }
             }
 
@@ -246,11 +278,13 @@ fun SearchContent(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            searchHistory.take(MAX_HISTORY_CHIPS).forEach { query ->
+                            searchHistory.take(MAX_HISTORY_CHIPS).forEachIndexed { index, query ->
                                 Surface(
                                     onClick = { onSelectHistory(query) },
                                     shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(20.dp)),
-                                    modifier = Modifier.widthIn(max = 280.dp),
+                                    modifier = Modifier
+                                        .widthIn(max = 280.dp)
+                                        .then(if (index == 0) Modifier.focusRequester(firstChipFocus) else Modifier),
                                 ) {
                                     // Fixed height so CJK and Latin chips line up.
                                     Box(

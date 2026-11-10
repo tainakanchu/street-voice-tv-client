@@ -24,6 +24,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -37,6 +38,9 @@ import com.example.streetvoicetv.data.update.UpdateState
 import com.example.streetvoicetv.ui.common.UserMessages
 import com.example.streetvoicetv.ui.components.ModalFocusTrap
 import com.example.streetvoicetv.ui.components.requestFocusWhenReady
+
+/** Test tag of the dialog body (focused itself while downloading / installing). */
+const val UPDATE_DIALOG_BODY_TAG = "update_dialog_body"
 
 /** Shortens long version strings, e.g. "1.2.3-beta+build.2026" -> "1.2.3-beta". */
 internal fun displayVersion(version: String): String {
@@ -76,6 +80,7 @@ fun UpdateDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .testTag(UPDATE_DIALOG_BODY_TAG)
                     // Without buttons (downloading / installing) the dialog body itself
                     // holds focus, so D-pad input never reaches the screen below.
                     .then(if (hasButton) Modifier else Modifier.focusRequester(bodyFocus).focusable())

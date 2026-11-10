@@ -10,6 +10,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 
 /**
  * One-shot initial focus for the first meaningful item of a screen.
@@ -22,6 +23,7 @@ import androidx.compose.ui.focus.focusRequester
 @Stable
 class InitialFocus internal constructor(
     val requester: FocusRequester,
+    internal val rootRequester: FocusRequester,
     private val done: MutableState<Boolean>,
 ) {
     internal var isDone: Boolean
@@ -34,8 +36,9 @@ class InitialFocus internal constructor(
 @Composable
 fun rememberInitialFocus(): InitialFocus {
     val requester = remember { FocusRequester() }
+    val rootRequester = remember { FocusRequester() }
     val done = rememberSaveable { mutableStateOf(false) }
-    return remember(requester, done) { InitialFocus(requester, done) }
+    return remember(requester, rootRequester, done) { InitialFocus(requester, rootRequester, done) }
 }
 
 /**
@@ -52,4 +55,26 @@ fun Modifier.initialFocus(focus: InitialFocus?, enabled: Boolean = true): Modifi
         }
     }
     return this.focusRequester(focus.requester)
+}
+
+/**
+ * Marks the focus root of a screen and brings focus back to where it was when the user
+ * returns to the screen (e.g. Back from the player): without this, nothing would be focused,
+ * because the previously focused element was disposed together with the screen.
+ *
+ * Must be followed by a focus group (a lazy list's own group, or `.focusGroup()`).
+ * [focusRestorer] keeps the focused child in the saved state of the back stack entry, so it
+ * survives navigation; every nested focus group on the way down to the element needs its own
+ * focusRestorer (lazy rows / lists) for the restoration to reach the exact element.
+ * On the first visit nothing happens here: [initialFocus] handles that.
+ */
+@Composable
+fun Modifier.focusRoot(focus: InitialFocus): Modifier {
+    val returning = remember { focus.isDone }
+    if (returning) {
+        LaunchedEffect(focus) { focus.rootRequester.requestFocusWhenReady() }
+    }
+    return this
+        .focusRequester(focus.rootRequester)
+        .focusRestorer()
 }

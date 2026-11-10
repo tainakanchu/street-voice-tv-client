@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ClickableSurfaceDefaults
@@ -30,6 +31,9 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import com.example.streetvoicetv.playback.PlaybackState
 import com.example.streetvoicetv.ui.theme.Dimens
+
+/** Test tag of the NowPlayingBar container. */
+const val NOW_PLAYING_BAR_TAG = "now_playing_bar"
 
 /**
  * Compact "now playing" chip shown at the bottom-end of the screen.
@@ -46,7 +50,9 @@ fun NowPlayingBar(
     val song = playbackState.song ?: return
 
     Row(
-        modifier = modifier.widthIn(max = Dimens.NowPlayingBarMaxWidth),
+        modifier = modifier
+            .testTag(NOW_PLAYING_BAR_TAG)
+            .widthIn(max = Dimens.NowPlayingBarMaxWidth),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {

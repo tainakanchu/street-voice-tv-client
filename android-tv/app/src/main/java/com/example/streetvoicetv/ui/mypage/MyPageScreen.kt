@@ -18,7 +18,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -26,6 +28,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
@@ -46,8 +50,10 @@ import com.example.streetvoicetv.ui.components.MessageAction
 import com.example.streetvoicetv.ui.components.MessageState
 import com.example.streetvoicetv.ui.components.PlaylistCard
 import com.example.streetvoicetv.ui.components.SongListItem
+import com.example.streetvoicetv.ui.components.focusRoot
 import com.example.streetvoicetv.ui.components.initialFocus
 import com.example.streetvoicetv.ui.components.rememberInitialFocus
+import com.example.streetvoicetv.ui.components.requestFocusWhenReady
 import com.example.streetvoicetv.ui.theme.Dimens
 import com.example.streetvoicetv.ui.theme.LocalBottomOverlayInset
 
@@ -88,6 +94,19 @@ fun MyPageContent(
     initialShowLogoutConfirm: Boolean = false,
 ) {
     var showLogoutConfirm by rememberSaveable { mutableStateOf(initialShowLogoutConfirm) }
+    // When the dialog is cancelled, focus returns to the 登出 button that opened it
+    // (the dialog's focused button is gone, so focus would otherwise be left nowhere).
+    // In the error state the button is not attached and MessageState refocuses 重試 itself.
+    val logoutFocus = remember { FocusRequester() }
+    var confirmWasShown by remember { mutableStateOf(false) }
+    LaunchedEffect(showLogoutConfirm) {
+        if (showLogoutConfirm) {
+            confirmWasShown = true
+        } else if (confirmWasShown) {
+            confirmWasShown = false
+            logoutFocus.requestFocusWhenReady()
+        }
+    }
 
     Box(Modifier.fillMaxSize()) {
         Box(
@@ -117,6 +136,7 @@ fun MyPageContent(
                     onSongSelected = onSongSelected,
                     onPlaylistSelected = onPlaylistSelected,
                     onLogoutClick = { showLogoutConfirm = true },
+                    logoutFocus = logoutFocus,
                     requestInitialFocus = !showLogoutConfirm,
                 )
             }
@@ -145,6 +165,7 @@ private fun MyPageList(
     onSongSelected: (Song, List<Song>) -> Unit,
     onPlaylistSelected: (Playlist) -> Unit,
     onLogoutClick: () -> Unit,
+    logoutFocus: FocusRequester,
     requestInitialFocus: Boolean,
 ) {
     val profile = uiState.profile ?: return
@@ -154,7 +175,9 @@ private fun MyPageList(
     val hasItems = uiState.playlists.isNotEmpty() || uiState.likedSongs.isNotEmpty()
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .focusRoot(firstItemFocus),
         contentPadding = PaddingValues(top = Dimens.SafeVertical, bottom = Dimens.SafeVertical + bottomInset),
     ) {
         // Profile header
@@ -205,7 +228,10 @@ private fun MyPageList(
                         )
                     }
                 }
-                OutlinedButton(onClick = onLogoutClick) {
+                OutlinedButton(
+                    onClick = onLogoutClick,
+                    modifier = Modifier.focusRequester(logoutFocus),
+                ) {
                     Text("登出")
                 }
             }

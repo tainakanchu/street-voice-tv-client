@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.Arrangement
@@ -57,6 +58,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -222,7 +224,11 @@ fun PlayerContent(
                     Column(
                         modifier = Modifier
                             .weight(1f)
-                            .fillMaxHeight(),
+                            .fillMaxHeight()
+                            // Coming back from the lyrics panel returns to the element focus
+                            // left from, not to whatever is level with the panel's centre.
+                            .focusRestorer()
+                            .focusGroup(),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         SongInfo(
@@ -465,6 +471,10 @@ private fun PlayerControls(
     val primary = MaterialTheme.colorScheme.primary
 
     Row(
+        // Down from the seek bar returns to the control focus came from (play / pause by default).
+        modifier = Modifier
+            .focusRestorer(playPauseFocus)
+            .focusGroup(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

@@ -5,15 +5,24 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -34,6 +43,8 @@ import com.example.streetvoicetv.ui.album.AlbumScreen
 import com.example.streetvoicetv.ui.artist.ArtistScreen
 import com.example.streetvoicetv.ui.components.BlockFocusEntry
 import com.example.streetvoicetv.ui.components.NowPlayingBar
+import com.example.streetvoicetv.ui.components.requestFocusWhenReady
+import com.example.streetvoicetv.ui.components.tryRequestFocus
 import com.example.streetvoicetv.ui.home.HomeScreen
 import com.example.streetvoicetv.ui.login.LoginScreen
 import com.example.streetvoicetv.ui.mypage.MyPageScreen
@@ -236,6 +247,7 @@ fun AppScaffold(
     content: @Composable () -> Unit,
 ) {
     val nowPlayingVisible = showNowPlaying && playbackState.song != null
+    val contentFocus = remember { FocusRequester() }
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -246,22 +258,54 @@ fun AppScaffold(
             LocalBottomOverlayInset provides if (nowPlayingVisible) Dimens.NowPlayingBarInset else 0.dp,
         ) {
             val dialogVisible = updateState !is UpdateState.Idle
+            // When the update dialog closes, focus would otherwise be left nowhere (its focused
+            // button is gone): return it to the screen, where the restorers bring it back to
+            // the element that was focused before the dialog appeared.
+            var dialogShown by remember { mutableStateOf(false) }
+            LaunchedEffect(dialogVisible) {
+                if (dialogVisible) {
+                    dialogShown = true
+                } else if (dialogShown) {
+                    dialogShown = false
+                    contentFocus.requestFocusWhenReady()
+                }
+            }
             // While the update dialog is shown, D-pad focus must not reach the screen below.
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .then(if (dialogVisible) BlockFocusEntry else Modifier),
             ) {
-                content()
+                // The screen is one focus group that remembers its focused child, so leaving the
+                // NowPlayingBar returns to the element focus came from. (The scrolling screen
+                // content lies under the floating bar, so plain geometric search from the bar
+                // would skip it and jump to the top of the screen.)
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .focusRequester(contentFocus)
+                        .focusRestorer()
+                        .focusGroup(),
+                ) {
+                    content()
+                }
 
                 if (nowPlayingVisible) {
                     NowPlayingBar(
                         playbackState = playbackState,
-                        onTap = onNowPlayingTap,
+                        onTap = {
+                            // The bar is hidden on the player screen. Removing it while it holds
+                            // focus would drop focus altogether (the window re-focuses the nearest
+                            // element of the outgoing screen and the player cannot take over), so
+                            // hand focus back to the screen first, as if a card had been clicked.
+                            contentFocus.tryRequestFocus()
+                            onNowPlayingTap()
+                        },
                         onTogglePlayPause = onTogglePlayPause,
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
-                            .padding(end = Dimens.SafeHorizontal, bottom = Dimens.SafeVertical),
+                            .padding(end = Dimens.SafeHorizontal, bottom = Dimens.SafeVertical)
+                            .focusProperties { up = contentFocus },
                     )
                 }
             }

@@ -22,7 +22,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -35,6 +34,7 @@ import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.ui.components.MessageAction
 import com.example.streetvoicetv.ui.components.MessageState
 import com.example.streetvoicetv.ui.components.SongListItem
+import com.example.streetvoicetv.ui.components.focusRoot
 import com.example.streetvoicetv.ui.components.initialFocus
 import com.example.streetvoicetv.ui.components.rememberInitialFocus
 import com.example.streetvoicetv.ui.theme.Dimens
@@ -93,7 +93,7 @@ fun AlbumContent(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .focusRestorer(),
+                    .focusRoot(firstSongFocus),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
                 contentPadding = screenListPadding(bottomInset),
             ) {

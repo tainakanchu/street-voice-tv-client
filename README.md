@@ -116,6 +116,14 @@ cd android-tv
   包含一般資料、超長標題（繁中／日文／英文）、空狀態、載入中、錯誤與焦點狀態。
   Screenshot tests render each screen's stateless `XxxContent` composable at 1080p TV resolution with normal data,
   very long titles, empty / loading / error states and focused states. Images are fake solid colours (no network).
+- D-pad 導覽測試位於 `app/src/test/java/com/example/streetvoicetv/navigation/`：以真實的 `KeyEvent`
+  （DPAD 方向鍵／CENTER／BACK）經由 Activity 送出，驗證焦點的移動、捲動後的可見性、對話框的焦點封鎖、
+  返回上一頁後的焦點還原，以及任何按鍵後焦點都不會遺失。小型 DSL 見 `DpadTestSupport.kt`
+  （`dpad(Dpad.Right, Dpad.Down)`、`assertFocusedText(...)`、`assertFocusedFullyVisible()`），
+  關鍵步驟另存 `dpad_*.png` 截圖。
+  D-pad navigation tests drive real key events through the activity and assert where focus lands
+  (rows, NowPlayingBar, dialogs, Back to a previous screen); every key press also fails the test if focus is lost.
+  The fake device reports `FEATURE_LEANBACK` and a D-pad remote, so scrolling and text fields behave as on a TV.
 - `verifyRoborazziDebug` 失敗時，差異圖會輸出到 `app/build/outputs/roborazzi/`（CI 會上傳為 artifact）。
   On failure, diff images are written to `app/build/outputs/roborazzi/` (uploaded as a CI artifact).
 - UI 有意變更後，執行 `recordRoborazziDebug` 並提交更新後的 PNG。
