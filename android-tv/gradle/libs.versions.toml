@@ -20,11 +20,12 @@ core-ktx = "1.18.0"
 
 # Testing
 junit = "4.13.2"
-robolectric = "4.14.1"
-roborazzi = "1.39.0"
-# Must match the android-all jar Robolectric expects for SCREENSHOT_SDK (35 = targetSdk) in Robolectric 4.14.x
-robolectric-android-all = "15-robolectric-12650502-i7"
-kotlinx-coroutines-test = "1.8.1"
+robolectric = "4.17"
+roborazzi = "1.78.0"
+# Must match the android-all jar Robolectric expects for SCREENSHOT_SDK (35 = targetSdk) in Robolectric 4.17
+# (see org.robolectric.plugins.DefaultSdkProvider in the robolectric jar)
+robolectric-android-all = "15-robolectric-13954326-i7"
+kotlinx-coroutines-test = "1.11.0"
 
 [libraries]
 r8 = { group = "com.android.tools", name = "r8", version.ref = "r8" }
