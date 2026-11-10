@@ -1,12 +1,14 @@
 [versions]
-agp = "8.7.3"
-kotlin = "2.0.21"
-ksp = "2.0.21-1.0.27"
+agp = "8.13.2"
+kotlin = "2.4.21"
+ksp = "2.3.13"
+# Overrides the R8 bundled with AGP 8.13 (Kotlin 2.4 metadata support); drop with AGP 9.1+.
+r8 = "9.1.57"
 compose-bom = "2024.12.01"
 compose-tv-foundation = "1.0.0-beta01"
 compose-tv-material = "1.0.0-beta01"
 media3 = "1.5.1"
-hilt = "2.53.1"
+hilt = "2.58"
 hilt-navigation-compose = "1.2.0"
 okhttp = "4.12.0"
 kotlinx-serialization = "1.7.3"
@@ -25,6 +27,8 @@ robolectric-android-all = "15-robolectric-12650502-i7"
 kotlinx-coroutines-test = "1.8.1"
 
 [libraries]
+r8 = { group = "com.android.tools", name = "r8", version.ref = "r8" }
+
 # Compose BOM
 compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "compose-bom" }
 compose-ui = { group = "androidx.compose.ui", name = "ui" }
@@ -59,6 +63,9 @@ media3-datasource-okhttp = { group = "androidx.media3", name = "media3-datasourc
 # Hilt
 hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }
 hilt-compiler = { group = "com.google.dagger", name = "hilt-compiler", version.ref = "hilt" }
+# Hilt 2.58 (last release for AGP 8.x) bundles a kotlin-metadata-jvm that only reads metadata up to 2.3;
+# force the one matching our Kotlin compiler onto the processor classpath.
+kotlin-metadata-jvm = { group = "org.jetbrains.kotlin", name = "kotlin-metadata-jvm", version.ref = "kotlin" }
 hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-compose", version.ref = "hilt-navigation-compose" }
 
 # OkHttp

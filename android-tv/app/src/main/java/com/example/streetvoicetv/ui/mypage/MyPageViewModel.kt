@@ -80,7 +80,7 @@ class MyPageViewModel @Inject constructor(
             }
         }
 
-        val name: String = username ?: return
+        val name: String = username
         likedUser = name
         _uiState.value = _uiState.value.copy(isLoading = true, needsLogin = false, playAllPending = null)
         loadJob = viewModelScope.launch {

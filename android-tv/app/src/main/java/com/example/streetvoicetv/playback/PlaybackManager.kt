@@ -173,7 +173,7 @@ class PlaybackManager internal constructor(
             error == null && (loading || isLoaded)
         queue.replace(songs, index)
         if (continueCurrent) {
-            queue.updateCurrent(current!!) // keep the richer (detail) object
+            queue.updateCurrent(current) // keep the richer (detail) object
             if (isLoaded && engine.playbackState == Player.STATE_ENDED) resume()
             publish()
         } else {

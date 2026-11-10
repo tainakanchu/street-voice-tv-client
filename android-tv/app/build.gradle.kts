@@ -66,10 +66,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
     buildFeatures {
         compose = true
         buildConfig = true
@@ -93,6 +89,12 @@ android {
                 it.systemProperty("robolectric.dependency.dir", robolectricDepsDir.get().asFile.absolutePath)
             }
         }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
 }
 
@@ -145,6 +147,7 @@ dependencies {
     // Hilt
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
+    ksp(libs.kotlin.metadata.jvm)
     implementation(libs.hilt.navigation.compose)
 
     // OkHttp
