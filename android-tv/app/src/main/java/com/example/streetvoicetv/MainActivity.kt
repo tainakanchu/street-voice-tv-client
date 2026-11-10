@@ -57,8 +57,6 @@ import com.example.streetvoicetv.ui.theme.LocalBottomOverlayInset
 import com.example.streetvoicetv.ui.theme.StreetVoiceTvTheme
 import com.example.streetvoicetv.ui.update.UpdateDialog
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -101,7 +99,6 @@ internal object Routes {
 }
 
 /** What the app root needs from playback (not the position, which ticks every 500ms). */
-private data class NowPlaying(val song: Song?, val isPlaying: Boolean)
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -112,16 +109,9 @@ fun StreetVoiceTvApp(
     activity: Activity,
 ) {
     val navController = rememberNavController()
-    // The root only needs what the NowPlayingBar shows (song, playing / paused): collecting the
-    // whole PlaybackState would recompose the app chrome on every position tick.
-    val nowPlayingFlow = remember(playbackManager) {
-        playbackManager.state
-            .map { NowPlaying(it.song, it.isPlaying) }
-            .distinctUntilChanged()
-    }
-    val nowPlaying by nowPlayingFlow.collectAsStateWithLifecycle(
-        initialValue = NowPlaying(playbackManager.state.value.song, playbackManager.state.value.isPlaying),
-    )
+    // The root only needs what the NowPlayingBar shows (song, playing / paused, error).
+    // `nowPlaying` never changes on position ticks, so the app chrome doesn't recompose per second.
+    val nowPlaying by playbackManager.nowPlaying.collectAsStateWithLifecycle()
     val isLoggedIn by sessionManager.isLoggedIn.collectAsStateWithLifecycle()
     val profileImageUrl by sessionManager.profileImageUrl.collectAsStateWithLifecycle()
     val updateState by updateChecker.state.collectAsStateWithLifecycle()
@@ -156,7 +146,7 @@ fun StreetVoiceTvApp(
     }
 
     val barState = remember(nowPlaying) {
-        PlaybackState(song = nowPlaying.song, isPlaying = nowPlaying.isPlaying)
+        PlaybackState(song = nowPlaying.song, isPlaying = nowPlaying.isPlaying, error = nowPlaying.error)
     }
 
     AppScaffold(
