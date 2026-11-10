@@ -204,7 +204,7 @@ fun ArtistContent(
                             // Entering the tab row (e.g. Up from the list) lands on the selected
                             // tab. Otherwise the geometrically nearest tab would get focus and,
                             // since focusing a tab selects it, switch the list underneath.
-                            .focusProperties { enter = { tabFocus[selectedIndex] } }
+                            .focusProperties { onEnter = { tabFocus[selectedIndex].requestFocus() } }
                             .focusGroup(),
                     ) {
                         tabs.forEachIndexed { index, tab ->

@@ -46,7 +46,7 @@ fun PlayAllButtons(
         modifier = modifier
             // Entering the row from the list (Up) or from above (Down) always lands on 播放全部,
             // not on whichever button happens to be geometrically closest.
-            .focusProperties { enter = { playAllFocus } }
+            .focusProperties { onEnter = { playAllFocus.requestFocus() } }
             .focusGroup(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
