@@ -9,6 +9,7 @@ import com.example.streetvoicetv.domain.repository.StreetVoiceRepository
 import com.example.streetvoicetv.ui.common.UserMessages
 import com.example.streetvoicetv.ui.common.userMessageFor
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -35,10 +36,13 @@ class AlbumViewModel @Inject constructor(
         }
     }
 
+    private var loadJob: Job? = null
+
     private fun load() {
         _uiState.value = _uiState.value.copy(isLoading = true, error = null)
 
-        viewModelScope.launch {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             val detailDeferred = async { repository.getAlbumDetail(albumId) }
             val songsDeferred = async { repository.getAlbumSongs(albumId) }
 
@@ -51,6 +55,8 @@ class AlbumViewModel @Inject constructor(
                         isLoading = false,
                         album = album,
                         songs = songsResult.getOrDefault(emptyList()),
+                        // A failed song list is shown inline instead of as "no songs".
+                        songsError = songsResult.exceptionOrNull()?.let { userMessageFor(TAG, it) },
                     )
                 }
                 .onFailure { error ->
@@ -75,5 +81,6 @@ data class AlbumUiState(
     val isLoading: Boolean = false,
     val album: Album? = null,
     val songs: List<Song> = emptyList(),
+    val songsError: String? = null,
     val error: String? = null,
 )

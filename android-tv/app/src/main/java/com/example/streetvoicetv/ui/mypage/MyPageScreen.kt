@@ -17,7 +17,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -66,9 +66,10 @@ fun MyPageScreen(
     onPlaylistSelected: (Playlist) -> Unit,
     onLoggedOut: () -> Unit,
     onBack: () -> Unit,
+    onRelogin: () -> Unit = {},
     viewModel: MyPageViewModel = hiltViewModel(),
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     MyPageContent(
         uiState = uiState,
@@ -79,6 +80,10 @@ fun MyPageScreen(
             onLoggedOut()
         },
         onRetry = { viewModel.retry() },
+        onRelogin = {
+            viewModel.logout()
+            onRelogin()
+        },
     )
 }
 
@@ -92,6 +97,7 @@ fun MyPageContent(
     onLogout: () -> Unit,
     onRetry: () -> Unit = {},
     initialShowLogoutConfirm: Boolean = false,
+    onRelogin: () -> Unit = {},
 ) {
     var showLogoutConfirm by rememberSaveable { mutableStateOf(initialShowLogoutConfirm) }
     // When the dialog is cancelled, focus returns to the 登出 button that opened it
@@ -119,6 +125,15 @@ fun MyPageContent(
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                     }
+                }
+
+                uiState.needsLogin -> {
+                    MessageState(
+                        message = UserMessages.SESSION_EXPIRED,
+                        isError = true,
+                        primaryAction = MessageAction("重新登入", onRelogin),
+                        requestInitialFocus = !showLogoutConfirm,
+                    )
                 }
 
                 uiState.profile == null -> {
@@ -173,6 +188,7 @@ private fun MyPageList(
     // Initial focus: first playlist, else first liked song (never the logout button).
     val firstItemFocus = rememberInitialFocus()
     val hasItems = uiState.playlists.isNotEmpty() || uiState.likedSongs.isNotEmpty()
+    val hasErrors = uiState.playlistsError != null || uiState.likedError != null
 
     LazyColumn(
         modifier = Modifier
@@ -258,6 +274,13 @@ private fun MyPageList(
             }
         }
 
+        // A section that failed to load says so instead of silently disappearing.
+        uiState.playlistsError?.takeIf { uiState.playlists.isEmpty() }?.let { message ->
+            item(key = "playlists_error_gap") { Spacer(Modifier.height(Dimens.SectionSpacing)) }
+            item(key = "playlists_error_header") { SectionHeader("我的歌單") }
+            item(key = "playlists_error") { InlineError(message) }
+        }
+
         // Liked songs
         if (uiState.likedSongs.isNotEmpty()) {
             item(key = "liked_gap") { Spacer(Modifier.height(Dimens.SectionSpacing)) }
@@ -277,7 +300,13 @@ private fun MyPageList(
             }
         }
 
-        if (!hasItems) {
+        uiState.likedError?.takeIf { uiState.likedSongs.isEmpty() }?.let { message ->
+            item(key = "liked_error_gap") { Spacer(Modifier.height(Dimens.SectionSpacing)) }
+            item(key = "liked_error_header") { SectionHeader("喜歡的歌曲") }
+            item(key = "liked_error") { InlineError(message) }
+        }
+
+        if (!hasItems && !hasErrors) {
             item(key = "empty") {
                 Box(
                     modifier = Modifier
@@ -294,6 +323,19 @@ private fun MyPageList(
             }
         }
     }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun InlineError(message: String) {
+    Text(
+        text = message,
+        style = MaterialTheme.typography.bodyLarge,
+        color = MaterialTheme.colorScheme.error,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.padding(horizontal = HPad, vertical = 8.dp),
+    )
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)

@@ -17,6 +17,10 @@ object UserMessages {
     const val NOT_FOUND = "找不到這個內容"
     const val PROFILE_FAILED = "無法載入個人資料，請稍後再試"
     const val UPDATE_FAILED = "無法下載更新，請檢查網路連線後再試"
+    const val INSTALL_FAILED = "無法啟動安裝程式，請稍後再試"
+    const val INSTALL_PERMISSION = "請在設定中允許本應用程式「安裝不明應用程式」，返回後按「安裝」。"
+    const val SESSION_EXPIRED = "登入資訊已失效，請重新登入"
+    const val PARTIAL_LOAD_FAILED = "部分內容無法載入"
 }
 
 /**

@@ -54,15 +54,16 @@ fun UpdateDialog(
     state: UpdateState,
     onUpdate: () -> Unit,
     onDismiss: () -> Unit,
+    onInstall: () -> Unit = {},
 ) {
     if (state is UpdateState.Idle) return
 
     val primaryFocus = remember { FocusRequester() }
     val bodyFocus = remember { FocusRequester() }
-    val isBusy = state is UpdateState.Downloading || state is UpdateState.ReadyToInstall
-    val hasButton = state is UpdateState.Available || state is UpdateState.Error
+    val isBusy = state is UpdateState.Downloading
+    val hasButton = !isBusy
 
-    // Back dismisses the dialog unless a download / install is in progress
+    // Back dismisses the dialog unless a download is in progress
     // (in which case Back is swallowed so it does not reach the screen below).
     BackHandler { if (!isBusy) onDismiss() }
 
@@ -120,14 +121,28 @@ fun UpdateDialog(
                     is UpdateState.ReadyToInstall -> {
                         DialogTitle("準備安裝")
                         Spacer(Modifier.height(12.dp))
-                        DialogMessage("下載完成，正在啟動安裝程式...")
+                        DialogMessage(
+                            when {
+                                state.needsPermission -> UserMessages.INSTALL_PERMISSION
+                                state.installerLaunched -> "已開啟安裝程式。若已取消，可按「安裝」重試。"
+                                else -> "下載完成，正在啟動安裝程式..."
+                            },
+                        )
+                        Spacer(Modifier.height(24.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            OutlinedButton(onClick = onDismiss) { Text("關閉") }
+                            Button(
+                                onClick = onInstall,
+                                modifier = Modifier.focusRequester(primaryFocus),
+                            ) { Text("安裝") }
+                        }
                     }
 
                     is UpdateState.Error -> {
                         // Raw details are logged by UpdateChecker; show a fixed message here.
                         DialogTitle("更新失敗", color = MaterialTheme.colorScheme.error)
                         Spacer(Modifier.height(12.dp))
-                        DialogMessage(UserMessages.UPDATE_FAILED)
+                        DialogMessage(if (state.isInstallError) UserMessages.INSTALL_FAILED else UserMessages.UPDATE_FAILED)
                         Spacer(Modifier.height(24.dp))
                         Button(
                             onClick = onDismiss,

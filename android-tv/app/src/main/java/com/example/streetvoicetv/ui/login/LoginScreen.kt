@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -22,7 +23,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.example.streetvoicetv.data.auth.SessionManager
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.streetvoicetv.ui.theme.Dimens
 
 private const val LOGIN_URL = "https://streetvoice.com/accounts/login/"
@@ -32,32 +34,36 @@ private const val BASE_URL = "https://streetvoice.com"
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun LoginScreen(
-    sessionManager: SessionManager,
     onLoginSuccess: () -> Unit,
     onBack: () -> Unit,
+    viewModel: LoginViewModel = hiltViewModel(),
 ) {
-    var isLoading by remember { mutableStateOf(true) }
+    var isPageLoading by remember { mutableStateOf(true) }
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
+    val loginState by viewModel.state.collectAsStateWithLifecycle()
 
-    // Back ボタンで cookie チェック → ログイン成功 or 戻る
-    BackHandler {
-        // WebView 内で戻れるページがあればまず戻る
-        val wv = webViewRef
-        if (wv != null && wv.canGoBack()) {
-            wv.goBack()
-        } else {
-            // WebView の履歴がなくなったら cookie チェックして終了
-            if (saveCookieSession(sessionManager)) {
-                // JS でユーザー名を取得してからコールバック
-                fetchUsernameViaJs(wv, sessionManager, onLoginSuccess)
-            } else {
-                onBack()
-            }
+    // Success / Cancelled are terminal and emitted once by the ViewModel, so the back stack
+    // is popped exactly once however often pages finish loading.
+    LaunchedEffect(loginState) {
+        when (loginState) {
+            LoginState.Success -> onLoginSuccess()
+            LoginState.Cancelled -> onBack()
+            else -> {}
         }
     }
 
-    LoginContent(isLoading = isLoading) {
-        // WebView
+    BackHandler {
+        val wv = webViewRef
+        if (wv != null && wv.canGoBack()) {
+            // Go back inside the web page first.
+            wv.goBack()
+        } else {
+            // No web history left: confirm a login if there is one, otherwise leave.
+            viewModel.onBack(currentCookies())
+        }
+    }
+
+    LoginContent(isLoading = isPageLoading || loginState == LoginState.Confirming) {
         AndroidView(
             factory = { context ->
                 WebView(context).apply {
@@ -72,16 +78,15 @@ fun LoginScreen(
 
                     webViewClient = object : WebViewClient() {
                         override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                            isLoading = true
+                            isPageLoading = true
                         }
 
                         override fun onPageFinished(view: WebView?, url: String?) {
-                            isLoading = false
-                            // ログイン後にページ遷移した場合は自動検知
+                            isPageLoading = false
+                            // Left the login form: the user may have logged in. The ViewModel
+                            // confirms it via /api/v4/user/me/ (deduplicated, one-shot).
                             if (url != null && !url.contains("/accounts/login")) {
-                                if (saveCookieSession(sessionManager)) {
-                                    fetchUsernameViaJs(view, sessionManager, onLoginSuccess)
-                                }
+                                viewModel.onPageFinished(currentCookies())
                             }
                         }
                     }
@@ -89,6 +94,11 @@ fun LoginScreen(
                     webViewRef = this
                     loadUrl(LOGIN_URL)
                 }
+            },
+            onRelease = { webView ->
+                webViewRef = null
+                webView.stopLoading()
+                webView.destroy()
             },
             modifier = Modifier.fillMaxSize(),
         )
@@ -132,61 +142,9 @@ fun LoginContent(
     }
 }
 
-/** Cookie から session を取得して保存（username は後で JS から取得）。成功したら true */
-private fun saveCookieSession(sessionManager: SessionManager): Boolean {
-    val cookies = CookieManager.getInstance().getCookie(BASE_URL) ?: return false
-
-    val cookieMap = cookies.split(";")
-        .map { it.trim() }
-        .filter { it.contains("=") }
-        .associate {
-            val (key, value) = it.split("=", limit = 2)
-            key.trim() to value.trim()
-        }
-
-    val sessionId = cookieMap["session"] ?: cookieMap["sessionid"] ?: return false
-    val csrfToken = cookieMap["csrf-token"] ?: ""
-
-    sessionManager.saveSession(
-        sessionId = sessionId,
-        csrfToken = csrfToken,
-        username = sessionManager.username.value, // 既存のユーザー名を維持
-    )
-    return true
-}
-
-/** WebView 内の JS で /api/v4/user/me/ を叩いてユーザー名を取得 */
-private fun fetchUsernameViaJs(webView: WebView?, sessionManager: SessionManager, onDone: () -> Unit) {
-    if (webView == null) {
-        onDone()
-        return
+private fun currentCookies(): String? =
+    try {
+        CookieManager.getInstance().getCookie(BASE_URL)
+    } catch (e: Exception) {
+        null
     }
-
-    val js = """
-        (function() {
-            try {
-                var xhr = new XMLHttpRequest();
-                xhr.open('GET', '/api/v4/user/me/', false);
-                xhr.setRequestHeader('Accept', 'application/json');
-                xhr.send();
-                if (xhr.status === 200) {
-                    var data = JSON.parse(xhr.responseText);
-                    return data.username || '';
-                }
-            } catch(e) {}
-            return '';
-        })();
-    """.trimIndent()
-
-    webView.evaluateJavascript(js) { result ->
-        val username = result?.trim('"')?.takeIf { it.isNotBlank() }
-        if (username != null) {
-            sessionManager.saveSession(
-                sessionId = sessionManager.getSessionId() ?: "",
-                csrfToken = sessionManager.getCsrfToken() ?: "",
-                username = username,
-            )
-        }
-        onDone()
-    }
-}

@@ -51,6 +51,22 @@ class MyPageScreenshotTest {
     }
 
     @Test
+    fun mypage_partial_errors() = compose.captureTv("mypage_partial_errors") {
+        MyPage(
+            MyPageUiState(
+                profile = FakeData.artists[0],
+                playlists = FakeData.playlists,
+                likedError = com.example.streetvoicetv.ui.common.UserMessages.TIMEOUT,
+            ),
+        )
+    }
+
+    @Test
+    fun mypage_needs_login() = compose.captureTv("mypage_needs_login") {
+        MyPage(MyPageUiState(needsLogin = true))
+    }
+
+    @Test
     fun mypage_loading() = compose.captureTv("mypage_loading") { MyPage(MyPageUiState(isLoading = true)) }
 
     @Test

@@ -18,6 +18,7 @@ import com.example.streetvoicetv.domain.model.PlayableStream
 import com.example.streetvoicetv.domain.model.Playlist
 import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.domain.repository.StreetVoiceRepository
+import kotlinx.coroutines.CancellationException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -29,19 +30,19 @@ class StreetVoiceRepositoryImpl @Inject constructor(
     // --- Search ---
 
     override suspend fun searchSongs(query: String, limit: Int, offset: Int): Result<List<Song>> {
-        return runCatching {
+        return runCatchingCancellable {
             api.searchSongs(query, limit, offset).results.map { it.toDomain() }
         }
     }
 
     override suspend fun searchArtists(query: String, limit: Int, offset: Int): Result<List<Artist>> {
-        return runCatching {
+        return runCatchingCancellable {
             api.searchUsers(query, limit, offset).results.map { it.toDomain() }
         }
     }
 
     override suspend fun searchPlaylists(query: String, limit: Int, offset: Int): Result<List<Playlist>> {
-        return runCatching {
+        return runCatchingCancellable {
             api.searchPlaylists(query, limit, offset).results.map { it.toDomain() }
         }
     }
@@ -49,53 +50,59 @@ class StreetVoiceRepositoryImpl @Inject constructor(
     // --- Song ---
 
     override suspend fun getSongDetail(songId: Int): Result<Song> {
-        return runCatching {
+        return runCatchingCancellable {
             api.getSongDetail(songId).toDomain()
         }
     }
 
     override suspend fun getStreamUrl(songId: Int): Result<PlayableStream> {
-        return runCatching {
+        return runCatchingCancellable {
             PlayableStream(songId = songId, hlsUrl = api.getStreamUrl(songId).file)
         }
     }
 
     override suspend fun likeSong(songId: Int): Result<Unit> {
-        return runCatching { api.likeSong(songId) }
+        return runCatchingCancellable { api.likeSong(songId) }
     }
 
     override suspend fun unlikeSong(songId: Int): Result<Unit> {
-        return runCatching { api.unlikeSong(songId) }
+        return runCatchingCancellable { api.unlikeSong(songId) }
+    }
+
+    // --- Session ---
+
+    override suspend fun getCurrentUsername(): Result<String> {
+        return runCatchingCancellable { api.getCurrentUser().username }
     }
 
     // --- Artist ---
 
     override suspend fun getArtistDetail(username: String): Result<Artist> {
-        return runCatching {
+        return runCatchingCancellable {
             api.getUserDetail(username).toDomain()
         }
     }
 
     override suspend fun getArtistSongs(username: String, limit: Int, offset: Int): Result<List<Song>> {
-        return runCatching {
+        return runCatchingCancellable {
             api.getUserSongs(username, limit, offset).results.map { it.toDomain() }
         }
     }
 
     override suspend fun getArtistAlbums(username: String, limit: Int, offset: Int): Result<List<Album>> {
-        return runCatching {
+        return runCatchingCancellable {
             api.getUserAlbums(username, limit, offset).results.map { it.toDomain() }
         }
     }
 
     override suspend fun getArtistPlaylists(username: String, limit: Int, offset: Int): Result<List<Playlist>> {
-        return runCatching {
+        return runCatchingCancellable {
             api.getUserPlaylists(username, limit, offset).results.map { it.toDomain() }
         }
     }
 
     override suspend fun getLikedSongs(username: String, limit: Int, offset: Int): Result<List<Song>> {
-        return runCatching {
+        return runCatchingCancellable {
             api.getUserLikedSongs(username, limit, offset).results.map { it.contentObject.toDomain() }
         }
     }
@@ -103,13 +110,13 @@ class StreetVoiceRepositoryImpl @Inject constructor(
     // --- Album ---
 
     override suspend fun getAlbumDetail(albumId: Int): Result<Album> {
-        return runCatching {
+        return runCatchingCancellable {
             api.getAlbumDetail(albumId).toDomain()
         }
     }
 
     override suspend fun getAlbumSongs(albumId: Int, limit: Int, offset: Int): Result<List<Song>> {
-        return runCatching {
+        return runCatchingCancellable {
             api.getAlbumSongs(albumId, limit, offset).results.map { it.toDomain() }
         }
     }
@@ -117,35 +124,48 @@ class StreetVoiceRepositoryImpl @Inject constructor(
     // --- Home / Discover ---
 
     override suspend fun getRealtimeChart(limit: Int): Result<List<Song>> {
-        return runCatching {
+        return runCatchingCancellable {
             api.getRealtimeChart(limit = limit).results.map { it.song.toDomain() }
         }
     }
 
     override suspend fun getEditorChoice(limit: Int): Result<List<Song>> {
-        return runCatching {
+        return runCatchingCancellable {
             api.getEditorChoice(limit = limit).results.map { it.contentObject.toDomain() }
         }
     }
 
     override suspend fun getPlaylistDetail(playlistId: Int): Result<Playlist> {
-        return runCatching {
+        return runCatchingCancellable {
             api.getPlaylistDetail(playlistId).toDomain()
         }
     }
 
     override suspend fun getRecommendedPlaylists(limit: Int): Result<List<Playlist>> {
-        return runCatching {
+        return runCatchingCancellable {
             api.getSectionPlaylists(sectionId = 1, limit = limit).results.map { it.toDomain() }
         }
     }
 
     override suspend fun getPlaylistSongs(playlistId: Int, limit: Int): Result<List<Song>> {
-        return runCatching {
+        return runCatchingCancellable {
             api.getPlaylistSongs(playlistId, limit = limit).results.map { it.song.toDomain() }
         }
     }
 }
+
+/**
+ * Like [runCatching], but rethrows [CancellationException] so that a cancelled
+ * coroutine (e.g. a superseded search) stops instead of reporting a "failure".
+ */
+internal inline fun <T> runCatchingCancellable(block: () -> T): Result<T> =
+    try {
+        Result.success(block())
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Throwable) {
+        Result.failure(e)
+    }
 
 // --- Mappers ---
 
@@ -159,10 +179,10 @@ private fun SearchSongResult.toDomain(): Song = Song(
     playsCount = playsCount,
 )
 
-private fun SongDetailResponse.toDomain(): Song = Song(
+internal fun SongDetailResponse.toDomain(): Song = Song(
     id = id,
     name = name,
-    artistName = user.profile?.nickname ?: user.username,
+    artistName = user.displayNickname ?: user.username,
     artistUsername = user.username,
     imageUrl = image,
     durationSeconds = length,
@@ -177,7 +197,7 @@ private fun SongDetailResponse.toDomain(): Song = Song(
     albumId = album?.id,
     albumName = album?.name,
     albumImageUrl = album?.image,
-    artistProfileImageUrl = user.profile?.image,
+    artistProfileImageUrl = user.displayImage,
     isLiked = isLike,
 )
 
