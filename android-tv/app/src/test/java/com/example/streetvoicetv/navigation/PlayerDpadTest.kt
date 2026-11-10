@@ -89,6 +89,9 @@ class PlayerDpadTest {
         }
         compose.dpad(Dpad.Center)
         assertEquals(listOf("like"), calls)
+        // The 佇列 (queue) toggle is the last control.
+        compose.dpad(Dpad.Right)
+        compose.assertFocusedDescription("佇列")
     }
 
     @Test
@@ -126,8 +129,8 @@ class PlayerDpadTest {
         setPlayer(FakeData.playbackLong)
         compose.assertFocusedDescription("播放")
 
-        compose.dpad(Dpad.Right, times = 3)
-        compose.assertFocusedDescription("喜歡")
+        compose.dpad(Dpad.Right, times = 4)
+        compose.assertFocusedDescription("佇列")
         compose.dpad(Dpad.Right)
         compose.assertFocusedTag(LYRICS_PANEL_TAG)
 
@@ -148,7 +151,7 @@ class PlayerDpadTest {
         compose.dpad(Dpad.Down)
         compose.assertFocusedTag(LYRICS_PANEL_TAG)
         compose.dpad(Dpad.Left)
-        compose.assertFocusedDescription("喜歡")
+        compose.assertFocusedDescription("佇列")
 
         // Up scrolls back from the bottom.
         compose.dpad(Dpad.Right, Dpad.Up)
@@ -165,7 +168,7 @@ class PlayerDpadTest {
             isLoggedIn = false,
         )
         compose.dpad(Dpad.Right, times = 4)
-        compose.assertFocusedDescription("重複播放")
+        compose.assertFocusedDescription("佇列")
     }
 
     @Test

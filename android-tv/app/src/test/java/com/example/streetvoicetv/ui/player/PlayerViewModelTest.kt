@@ -167,6 +167,22 @@ class PlayerViewModelTest {
     }
 
     @Test
+    fun `upNext exposes the manager queue and playQueueItem jumps to a queued song`() {
+        val vm = queueAndOpen(testSongs(4), 1)
+        assertEquals(listOf(1, 2, 3, 4), vm.upNext.value.items.map { it.song.id })
+        assertEquals(1, vm.upNext.value.currentPosition)
+        assertEquals(3, vm.upNext.value.next?.song?.id)
+
+        vm.playQueueItem(3)
+        runCurrent()
+        assertEquals(4, h.manager.state.value.song?.id)
+        assertEquals(3, vm.upNext.value.currentPosition)
+        assertEquals("details fetched for the new song", 4, repo.detailCalls.last())
+        assertEquals("lyrics 4", vm.upNext.value.current?.song?.lyrics)
+        assertEquals(2, h.engine.loads.size)
+    }
+
+    @Test
     fun `opening a song that is not queued loads it as a single-song queue`() {
         val vm = viewModel(7)
         runCurrent()

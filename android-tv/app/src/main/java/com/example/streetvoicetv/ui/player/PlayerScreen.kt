@@ -3,6 +3,7 @@ package com.example.streetvoicetv.ui.player
 import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -11,6 +12,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -29,6 +31,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -52,6 +55,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -91,6 +95,7 @@ import coil.request.ImageRequest
 import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.playback.PlaybackManager
 import com.example.streetvoicetv.playback.PlaybackState
+import com.example.streetvoicetv.playback.QueueView
 import com.example.streetvoicetv.playback.RepeatMode
 import com.example.streetvoicetv.playback.formatMs
 import com.example.streetvoicetv.playback.progressOf
@@ -116,6 +121,17 @@ private const val LYRICS_SCROLL_STEP_PX = 240f
 /** Test tag of the playback error banner (error + 重試). */
 const val PLAYBACK_ERROR_TAG = "player_playback_error"
 
+/** Content description of the 佇列 (queue) toggle in the controls row. */
+const val QUEUE_BUTTON_DESCRIPTION = "佇列"
+
+/**
+ * Icon-only control buttons: slimmer than tv-material's 58dp minimum width so all seven
+ * (6 x 48 + 56 + 6 x 8 = 392dp) fit the left column (408dp at 960dp wide).
+ */
+private val ControlButtonPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+private val ControlButton = Modifier.width(48.dp)
+private val PlayButtonWidth = 56.dp
+
 /** Decode size (px) of the blurred background art. */
 private const val BACKGROUND_DECODE_PX = 64
 
@@ -132,6 +148,7 @@ fun PlayerScreen(
     val isLiked by viewModel.isLiked.collectAsState()
     val isLoggedIn by viewModel.isLoggedIn.collectAsState()
     val isDetailLoading by viewModel.isDetailLoading.collectAsState()
+    val upNext by viewModel.upNext.collectAsState()
     // Collected here but only read (deferred) inside the progress UI, so a tick recomposes just that.
     val position = viewModel.positionMs.collectAsState()
 
@@ -162,6 +179,8 @@ fun PlayerScreen(
             onToggleRepeatMode = { viewModel.toggleRepeatMode() },
             onToggleLike = { viewModel.toggleLike() },
             onSeekBy = { viewModel.seekBy(it) },
+            upNext = upNext,
+            onPlayQueueItem = { viewModel.playQueueItem(it) },
         )
     }
 }
@@ -171,6 +190,10 @@ fun PlayerScreen(
  *
  * [positionMs] is read lazily, only by the progress bar / time text, so position ticks do not
  * recompose the rest of the screen. [onSeekBy] gets the relative D-pad seek (ms).
+ *
+ * The 佇列 button switches the right-hand panel between the lyrics and the play queue
+ * ([upNext]); Back while the queue is shown returns to the lyrics (and focus to the 佇列 button
+ * if it was in the queue) instead of leaving the player. [initialQueueOpen] is for tests.
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -194,6 +217,9 @@ fun PlayerContent(
     onRetryPlayback: () -> Unit = onRetry,
     lyricsScrollState: ScrollState = rememberScrollState(),
     songInfoProbe: () -> Unit = {},
+    upNext: QueueView = QueueView(),
+    onPlayQueueItem: (queueIndex: Int) -> Unit = {},
+    initialQueueOpen: Boolean = false,
 ) {
     when {
         loadingState.isLoading -> {
@@ -218,6 +244,16 @@ fun PlayerContent(
 
         loadingState.isLoaded && playbackState.song != null -> {
             val song = playbackState.song
+            var queueOpen by rememberSaveable { mutableStateOf(initialQueueOpen) }
+            var focusQueueOnOpen by remember { mutableStateOf(false) }
+            var rightPanelHasFocus by remember { mutableStateOf(false) }
+            val queueButtonFocus = remember { FocusRequester() }
+
+            // Back closes the queue (back to the lyrics) instead of leaving the player.
+            BackHandler(enabled = queueOpen) {
+                if (rightPanelHasFocus) queueButtonFocus.requestFocus()
+                queueOpen = false
+            }
 
             Box(modifier = Modifier.fillMaxSize()) {
                 PlayerBackground(imageUrl = song.imageUrl)
@@ -275,30 +311,51 @@ fun PlayerContent(
                             onSkipNext = onSkipNext,
                             onToggleRepeatMode = onToggleRepeatMode,
                             onToggleLike = onToggleLike,
+                            queueOpen = queueOpen,
+                            queueButtonFocus = queueButtonFocus,
+                            onToggleQueue = {
+                                focusQueueOnOpen = !queueOpen
+                                queueOpen = !queueOpen
+                            },
                         )
                         if (playbackState.error != null) {
                             Spacer(modifier = Modifier.height(8.dp))
                             PlaybackErrorBanner(message = playbackState.error, onRetry = onRetryPlayback)
-                        } else if (playbackState.queueSize > 1) {
+                        } else if (playbackState.queueSize > 1 || upNext.next != null) {
                             Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                "${playbackState.queueIndex + 1} / ${playbackState.queueSize}",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = Color.White.copy(alpha = 0.7f),
+                            QueueStatusLine(
+                                position = if (playbackState.queueSize > 1) {
+                                    "${playbackState.queueIndex + 1} / ${playbackState.queueSize}"
+                                } else {
+                                    null
+                                },
+                                nextTitle = upNext.next?.song?.name,
                             )
                         }
                     }
 
-                    // Right: Lyrics / Synopsis (D-pad scrollable)
-                    LyricsPanel(
-                        synopsis = song.synopsis,
-                        lyrics = song.lyrics,
-                        isLoading = isDetailLoading,
-                        scrollState = lyricsScrollState,
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight(),
-                    )
+                    // Right: lyrics / synopsis (D-pad scrollable), or the play queue.
+                    val rightModifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .onFocusChanged { rightPanelHasFocus = it.hasFocus }
+                    if (queueOpen) {
+                        QueuePanel(
+                            queue = upNext,
+                            onSelect = onPlayQueueItem,
+                            focusOnOpen = focusQueueOnOpen,
+                            onOpenFocusHandled = { focusQueueOnOpen = false },
+                            modifier = rightModifier,
+                        )
+                    } else {
+                        LyricsPanel(
+                            synopsis = song.synopsis,
+                            lyrics = song.lyrics,
+                            isLoading = isDetailLoading,
+                            scrollState = lyricsScrollState,
+                            modifier = rightModifier,
+                        )
+                    }
                 }
             }
         }
@@ -332,6 +389,36 @@ private fun PlayerBackground(imageUrl: String?) {
             },
         contentScale = ContentScale.Crop,
     )
+}
+
+/** "3 / 10 · 下一首：<title>" below the controls (single line; the title is ellipsized). */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun QueueStatusLine(position: String?, nextTitle: String?) {
+    val style = MaterialTheme.typography.labelMedium
+    val dim = Color.White.copy(alpha = 0.7f)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (position != null) {
+            Text(position, style = style, color = dim, maxLines = 1)
+        }
+        if (nextTitle != null) {
+            if (position != null) Text("  ·  ", style = style, color = dim, maxLines = 1)
+            Text(
+                text = "下一首：$nextTitle",
+                style = style,
+                color = Color.White.copy(alpha = 0.85f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .testTag(NEXT_SONG_HINT_TAG),
+            )
+        }
+    }
 }
 
 /** Playback error (e.g. the stream failed mid-song) with a retry that resumes at the last position. */
@@ -576,6 +663,9 @@ private fun PlayerControls(
     onSkipNext: () -> Unit,
     onToggleRepeatMode: () -> Unit,
     onToggleLike: () -> Unit,
+    queueOpen: Boolean,
+    queueButtonFocus: FocusRequester,
+    onToggleQueue: () -> Unit,
 ) {
     val playPauseFocus = remember { FocusRequester() }
     val primary = MaterialTheme.colorScheme.primary
@@ -585,10 +675,10 @@ private fun PlayerControls(
         modifier = Modifier
             .focusRestorer(playPauseFocus)
             .focusGroup(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Button(onClick = onToggleShuffle) {
+        Button(onClick = onToggleShuffle, modifier = ControlButton, contentPadding = ControlButtonPadding) {
             Icon(
                 Icons.Default.Shuffle,
                 "隨機播放",
@@ -598,12 +688,15 @@ private fun PlayerControls(
         Button(
             onClick = onSkipPrevious,
             enabled = previousEnabled,
+            modifier = ControlButton,
+            contentPadding = ControlButtonPadding,
         ) {
             Icon(Icons.Default.SkipPrevious, "上一首")
         }
         Button(
             onClick = onTogglePlayPause,
-            modifier = Modifier.focusRequester(playPauseFocus),
+            modifier = Modifier.width(PlayButtonWidth).focusRequester(playPauseFocus),
+            contentPadding = ControlButtonPadding,
         ) {
             Icon(
                 if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
@@ -614,10 +707,12 @@ private fun PlayerControls(
         Button(
             onClick = onSkipNext,
             enabled = hasNext,
+            modifier = ControlButton,
+            contentPadding = ControlButtonPadding,
         ) {
             Icon(Icons.Default.SkipNext, "下一首")
         }
-        Button(onClick = onToggleRepeatMode) {
+        Button(onClick = onToggleRepeatMode, modifier = ControlButton, contentPadding = ControlButtonPadding) {
             Icon(
                 when (repeatMode) {
                     RepeatMode.ONE -> Icons.Default.RepeatOne
@@ -628,13 +723,25 @@ private fun PlayerControls(
             )
         }
         if (isLoggedIn) {
-            Button(onClick = onToggleLike) {
+            Button(onClick = onToggleLike, modifier = ControlButton, contentPadding = ControlButtonPadding) {
                 Icon(
                     if (isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                     if (isLiked) "取消喜歡" else "喜歡",
                     tint = if (isLiked) primary else LocalContentColor.current,
                 )
             }
+        }
+        // Switches the right-hand panel between the lyrics and the play queue.
+        Button(
+            onClick = onToggleQueue,
+            modifier = ControlButton.focusRequester(queueButtonFocus),
+            contentPadding = ControlButtonPadding,
+        ) {
+            Icon(
+                Icons.AutoMirrored.Filled.QueueMusic,
+                QUEUE_BUTTON_DESCRIPTION,
+                tint = if (queueOpen) primary else LocalContentColor.current,
+            )
         }
     }
 

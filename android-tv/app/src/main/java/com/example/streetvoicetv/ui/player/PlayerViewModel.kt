@@ -8,6 +8,7 @@ import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.domain.repository.StreetVoiceRepository
 import com.example.streetvoicetv.playback.PlaybackManager
 import com.example.streetvoicetv.playback.PlaybackState
+import com.example.streetvoicetv.playback.QueueView
 import com.example.streetvoicetv.ui.common.UserMessages
 import com.example.streetvoicetv.ui.common.userMessageFor
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -59,6 +60,9 @@ class PlayerViewModel @Inject constructor(
     val isLoggedIn: StateFlow<Boolean> = sessionManager.isLoggedIn
 
     val playbackState: StateFlow<PlaybackState> = playbackManager.state
+
+    /** The play queue in play order (does not change with the position). */
+    val upNext: StateFlow<QueueView> = playbackManager.upNext
 
     /** Live position; collect only where progress is drawn. */
     val positionMs: StateFlow<Long> = playbackManager.positionMs
@@ -131,6 +135,9 @@ class PlayerViewModel @Inject constructor(
     fun skipNext() = playbackManager.playNext()
 
     fun skipPrevious() = playbackManager.playPrevious()
+
+    /** Jumps to a song of the queue panel ([com.example.streetvoicetv.playback.QueueItem.queueIndex]). */
+    fun playQueueItem(queueIndex: Int) = playbackManager.playQueueItem(queueIndex)
 
     fun seekBy(deltaMs: Long) = playbackManager.seekBy(deltaMs)
 

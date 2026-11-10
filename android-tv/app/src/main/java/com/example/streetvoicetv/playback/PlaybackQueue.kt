@@ -22,7 +22,14 @@ class PlaybackQueue(private val random: Random = Random.Default) {
     var shuffleEnabled: Boolean = false
         private set
     var repeatMode: RepeatMode = RepeatMode.OFF
+        set(value) {
+            if (field != value) revision++
+            field = value
+        }
 
+    /** Incremented on every change that can change [view] (cheap change detection for publishers). */
+    var revision: Int = 0
+        private set
     private var shuffleOrder: List<Int> = emptyList()
     private var shufflePosition: Int = -1
 
@@ -39,6 +46,7 @@ class PlaybackQueue(private val random: Random = Random.Default) {
         songs = newSongs
         currentIndex = if (newSongs.isEmpty()) -1 else startIndex.coerceIn(newSongs.indices)
         regenerateShuffle()
+        revision++
     }
 
     fun clear() = replace(emptyList(), -1)
@@ -48,12 +56,14 @@ class PlaybackQueue(private val random: Random = Random.Default) {
         val index = currentIndex
         if (index !in songs.indices || songs[index].id != song.id) return false
         songs = songs.toMutableList().also { it[index] = song }
+        revision++
         return true
     }
 
     fun setShuffle(enabled: Boolean) {
         shuffleEnabled = enabled
         regenerateShuffle()
+        revision++
     }
 
     val hasNext: Boolean
@@ -85,6 +95,7 @@ class PlaybackQueue(private val random: Random = Random.Default) {
         } else {
             currentIndex = if (currentIndex + 1 < songs.size) currentIndex + 1 else 0
         }
+        revision++
         return true
     }
 
@@ -97,7 +108,44 @@ class PlaybackQueue(private val random: Random = Random.Default) {
         } else {
             currentIndex = if (currentIndex > 0) currentIndex - 1 else songs.size - 1
         }
+        revision++
         return true
+    }
+
+    /**
+     * Makes [index] (an index into [songs]) current without rebuilding the queue: with shuffle
+     * the shuffled order is kept and the position moves to that song (songs between the old
+     * and the new position are skipped / become upcoming again). Returns false when out of range.
+     */
+    fun jumpTo(index: Int): Boolean {
+        if (index !in songs.indices) return false
+        if (shuffleEnabled) {
+            val position = shuffleOrder.indexOf(index)
+            if (position < 0) return false
+            shufflePosition = position
+        }
+        currentIndex = index
+        revision++
+        return true
+    }
+
+    /** The queue in play order (see [QueueView]). */
+    fun view(): QueueView {
+        if (currentIndex !in songs.indices) {
+            return QueueView(shuffleEnabled = shuffleEnabled, repeatMode = repeatMode)
+        }
+        val (order, position) = when {
+            shuffleEnabled -> shuffleOrder to shufflePosition
+            // Wrapping: what was played before comes again after the end, so list it there.
+            wraps -> (songs.indices.drop(currentIndex) + songs.indices.take(currentIndex)) to 0
+            else -> songs.indices.toList() to currentIndex
+        }
+        return QueueView(
+            items = order.map { QueueItem(it, songs[it]) },
+            currentPosition = position,
+            shuffleEnabled = shuffleEnabled,
+            repeatMode = repeatMode,
+        )
     }
 
     private fun regenerateShuffle() {

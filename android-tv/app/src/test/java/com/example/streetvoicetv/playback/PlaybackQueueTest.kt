@@ -111,6 +111,132 @@ class PlaybackQueueTest {
         assertTrue(q.hasNext)
     }
 
+    // --- view(): the queue in play order ---------------------------------------------------
+
+    private val QueueView.indices get() = items.map { it.queueIndex }
+
+    @Test
+    fun `view without shuffle lists the queue with played songs before the current one`() {
+        val v = queue(5, start = 2).view()
+        assertEquals(listOf(0, 1, 2, 3, 4), v.indices)
+        assertEquals(2, v.currentPosition)
+        assertEquals(3, v.current?.song?.id)
+        assertEquals(3, v.next?.queueIndex)
+        assertEquals(2, v.upcomingCount)
+        assertTrue(v.isPlayed(1))
+        assertFalse(v.isPlayed(2))
+        assertFalse(v.wrapsAround)
+    }
+
+    @Test
+    fun `view at the end of the queue has no next song when repeat is off`() {
+        val v = queue(3, start = 2).view()
+        assertEquals(2, v.currentPosition)
+        assertNull(v.next)
+        assertEquals(0, v.upcomingCount)
+    }
+
+    @Test
+    fun `view with shuffle follows the shuffled order and the next song is the one played next`() {
+        val q = queue(8, start = 5, shuffle = true)
+        assertTrue(q.moveToNext())
+        assertTrue(q.moveToNext())
+        val v = q.view()
+        assertEquals(q.order, v.indices)
+        assertEquals(2, v.currentPosition)
+        assertEquals(q.currentIndex, v.current?.queueIndex)
+        val expectedNext = v.next?.queueIndex
+        assertTrue(q.moveToNext())
+        assertEquals(expectedNext, q.currentIndex)
+    }
+
+    @Test
+    fun `view with repeat all wraps - songs before the current one follow after the end`() {
+        val q = queue(4, start = 2, repeat = RepeatMode.ALL)
+        val v = q.view()
+        assertEquals(listOf(2, 3, 0, 1), v.indices)
+        assertEquals(0, v.currentPosition)
+        assertTrue(v.wrapsAround)
+        assertFalse(v.reshufflesAtEnd)
+        // The listed order is exactly what next plays.
+        val played = mutableListOf(q.currentIndex)
+        repeat(3) { q.moveToNext(); played += q.currentIndex }
+        assertEquals(v.indices, played)
+    }
+
+    @Test
+    fun `view with shuffle and repeat keeps the history and reshuffles at the end`() {
+        val q = queue(3, shuffle = true, repeat = RepeatMode.ALL)
+        q.moveToNext()
+        q.moveToNext()
+        val v = q.view()
+        assertEquals(2, v.currentPosition)
+        assertNull(v.next)
+        assertTrue(v.reshufflesAtEnd)
+    }
+
+    @Test
+    fun `view of a single song and of an empty queue`() {
+        val single = queue(1).view()
+        assertEquals(listOf(0), single.indices)
+        assertEquals(0, single.currentPosition)
+        assertNull(single.next)
+        assertEquals(listOf(0), queue(1, repeat = RepeatMode.ALL).view().indices)
+
+        val empty = queue(0).view()
+        assertTrue(empty.isEmpty)
+        assertEquals(-1, empty.currentPosition)
+        assertNull(empty.current)
+        assertNull(empty.next)
+    }
+
+    @Test
+    fun `jumpTo moves within the list without rebuilding it`() {
+        val q = queue(5)
+        assertTrue(q.jumpTo(3))
+        assertEquals(3, q.currentIndex)
+        assertEquals(listOf(0, 1, 2, 3, 4), q.view().indices)
+        assertEquals(3, q.view().currentPosition)
+        assertFalse(q.jumpTo(5))
+        assertFalse(q.jumpTo(-1))
+        assertEquals(3, q.currentIndex)
+    }
+
+    @Test
+    fun `jumpTo keeps the shuffled order and moves the position in it`() {
+        val q = queue(8, start = 0, shuffle = true)
+        val order = q.order
+        val target = order[5]
+        assertTrue(q.jumpTo(target))
+        assertEquals(order, q.order)
+        assertEquals(5, q.view().currentPosition)
+        assertEquals(order[6], q.view().next?.queueIndex)
+        assertTrue(q.moveToNext())
+        assertEquals(order[6], q.currentIndex)
+        // Jumping back: the songs after it are upcoming again.
+        assertTrue(q.jumpTo(order[1]))
+        assertEquals(1, q.view().currentPosition)
+        assertTrue(q.hasPrevious)
+    }
+
+    @Test
+    fun `revision changes with every change that affects the view`() {
+        val q = queue(3)
+        val seen = mutableSetOf(q.revision)
+        fun changed() = assertTrue(seen.add(q.revision))
+        q.moveToNext(); changed()
+        q.moveToPrevious(); changed()
+        q.jumpTo(2); changed()
+        q.setShuffle(true); changed()
+        q.repeatMode = RepeatMode.ALL; changed()
+        q.updateCurrent(q.current!!.copy(lyrics = "x")); changed()
+        q.replace(testSongs(2), 0); changed()
+        val before = q.revision
+        q.repeatMode = RepeatMode.ALL // same value: no change
+        q.updateCurrent(testSong(99)) // not the current song: no change
+        assertEquals(before, q.revision)
+    }
+
     @Test
     fun `updateCurrent only replaces the same song`() {
         val q = queue(3)
