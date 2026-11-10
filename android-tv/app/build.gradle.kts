@@ -20,7 +20,7 @@ val copyRobolectricAndroidAll by tasks.registering(Sync::class) {
 
 android {
     namespace = "com.example.streetvoicetv"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.example.streetvoicetv"
@@ -148,7 +148,7 @@ dependencies {
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     ksp(libs.kotlin.metadata.jvm)
-    implementation(libs.hilt.navigation.compose)
+    implementation(libs.hilt.lifecycle.viewmodel.compose)
 
     // OkHttp
     implementation(libs.okhttp)
