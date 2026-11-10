@@ -64,7 +64,14 @@ class AlbumViewModel @Inject constructor(
             detailResult
                 .onSuccess { album ->
                     songs.reset(songsResult.getOrNull())
-                    _uiState.update { it.copy(isLoading = false, album = album) }
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            album = album,
+                            // A failed song list is shown inline instead of as "no songs".
+                            songsError = songsResult.exceptionOrNull()?.let { e -> userMessageFor(TAG, e) },
+                        )
+                    }
                 }
                 .onFailure { error ->
                     _uiState.update { it.copy(isLoading = false, error = userMessageFor(TAG, error)) }
@@ -102,6 +109,7 @@ data class AlbumUiState(
     val isLoading: Boolean = false,
     val album: Album? = null,
     val songs: List<Song> = emptyList(),
+    val songsError: String? = null,
     val loadMore: LoadMoreState = LoadMoreState(),
     /** Set while 播放全部 / 隨機播放 waits for the remaining pages. */
     val playAllPending: PlayAllMode? = null,

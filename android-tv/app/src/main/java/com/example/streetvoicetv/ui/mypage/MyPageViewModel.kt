@@ -3,10 +3,12 @@ package com.example.streetvoicetv.ui.mypage
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.streetvoicetv.data.auth.SessionManager
+import com.example.streetvoicetv.data.auth.SessionState
 import com.example.streetvoicetv.domain.model.Artist
 import com.example.streetvoicetv.domain.model.Playlist
 import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.domain.repository.StreetVoiceRepository
+import com.example.streetvoicetv.ui.common.userMessageFor
 import com.example.streetvoicetv.ui.common.LoadMoreState
 import com.example.streetvoicetv.ui.common.PLAY_ALL_CAP
 import com.example.streetvoicetv.ui.common.PagedListLoader
@@ -27,53 +29,85 @@ class MyPageViewModel @Inject constructor(
     private val sessionManager: SessionManager,
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(MyPageUiState())
+    private val _uiState = MutableStateFlow(MyPageUiState(isLoading = true))
     val uiState: StateFlow<MyPageUiState> = _uiState.asStateFlow()
 
-    private var username: String? = null
+    private var loadJob: Job? = null
+
+    /** Username the liked songs are paged for. */
+    private var likedUser: String? = null
     private val likedSongs = PagedListLoader(
         scope = viewModelScope,
         tag = TAG,
         key = Song::id,
         fetch = fetch@{ offset, limit ->
-            val user = username ?: return@fetch Result.failure(IllegalStateException("not logged in"))
+            val user = likedUser ?: return@fetch Result.failure(IllegalStateException("not logged in"))
             repository.getLikedSongs(user, limit, offset)
         },
         onChange = { items, loadMore -> _uiState.update { it.copy(likedSongs = items, likedLoadMore = loadMore) } },
     )
-    private var loadJob: Job? = null
 
     init {
-        load()
+        viewModelScope.launch {
+            // Reacts to the username becoming available (or the session being cleared,
+            // e.g. after a 401). StateFlow is already distinct.
+            sessionManager.session.collect { load(it) }
+        }
     }
 
-    private fun load() {
-        val user = sessionManager.username.value ?: return
-        username = user
+    private fun load(session: SessionState = sessionManager.session.value) {
         loadJob?.cancel()
-        _uiState.update { it.copy(isLoading = true, playAllPending = null) }
-
-        loadJob = viewModelScope.launch {
-            val profileDeferred = async { repository.getArtistDetail(user) }
-            val likedDeferred = async { likedSongs.fetchFirst() }
-            val playlistsDeferred = async { repository.getArtistPlaylists(user) }
-
-            val profile = profileDeferred.await().getOrNull()
-            val liked = likedDeferred.await().getOrNull()
-            val playlists = playlistsDeferred.await().getOrDefault(emptyList())
-
-            likedSongs.reset(liked)
-            _uiState.update {
-                it.copy(
-                    isLoading = false,
-                    profile = profile,
-                    playlists = playlists,
-                )
+        likedSongs.reset(null)
+        val username = session.username
+        when {
+            !session.isLoggedIn -> {
+                _uiState.value = MyPageUiState(needsLogin = true)
+                return
             }
+            username == null -> {
+                // Logged in but the username is unknown: fetch it; on success the session
+                // update calls load() again with the username.
+                _uiState.value = _uiState.value.copy(isLoading = true, needsLogin = false)
+                loadJob = viewModelScope.launch {
+                    repository.getCurrentUsername()
+                        .onSuccess { sessionManager.updateUsername(it) }
+                        .onFailure {
+                            userMessageFor(TAG, it)
+                            _uiState.value = MyPageUiState(needsLogin = true)
+                        }
+                }
+                return
+            }
+        }
+
+        val name: String = username ?: return
+        likedUser = name
+        _uiState.value = _uiState.value.copy(isLoading = true, needsLogin = false, playAllPending = null)
+        loadJob = viewModelScope.launch {
+            val profileDeferred = async { repository.getArtistDetail(name) }
+            val likedDeferred = async { likedSongs.fetchFirst() }
+            val playlistsDeferred = async { repository.getArtistPlaylists(name) }
+
+            val profileResult = profileDeferred.await()
+            val likedResult = likedDeferred.await()
+            val playlistsResult = playlistsDeferred.await()
+
+            likedSongs.reset(likedResult.getOrNull())
+            _uiState.value = MyPageUiState(
+                isLoading = false,
+                profile = profileResult.getOrNull(),
+                likedSongs = likedSongs.items,
+                likedLoadMore = likedSongs.state,
+                playlists = playlistsResult.getOrDefault(emptyList()),
+                // Partial failures are shown inline instead of as an empty section.
+                likedError = likedResult.exceptionOrNull()?.let { userMessageFor(TAG, it) },
+                playlistsError = playlistsResult.exceptionOrNull()?.let { userMessageFor(TAG, it) },
+            )
         }
     }
 
     fun logout() {
+        loadJob?.cancel()
         sessionManager.clearSession()
     }
 
@@ -106,4 +140,8 @@ data class MyPageUiState(
     /** Set while 播放全部 / 隨機播放 waits for the remaining liked songs. */
     val playAllPending: PlayAllMode? = null,
     val playlists: List<Playlist> = emptyList(),
+    val likedError: String? = null,
+    val playlistsError: String? = null,
+    /** The session is gone or its user could not be determined: offer 重新登入. */
+    val needsLogin: Boolean = false,
 )

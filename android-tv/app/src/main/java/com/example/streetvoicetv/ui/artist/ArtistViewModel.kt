@@ -75,7 +75,15 @@ class ArtistViewModel @Inject constructor(
                 .onSuccess { artist ->
                     songs.reset(songsResult.getOrNull())
                     albums.reset(albumsResult.getOrNull())
-                    _uiState.update { it.copy(isLoading = false, artist = artist) }
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            artist = artist,
+                            // Partial failures are shown inline instead of as an empty list.
+                            songsError = songsResult.exceptionOrNull()?.let { e -> userMessageFor(TAG, e) },
+                            albumsError = albumsResult.exceptionOrNull()?.let { e -> userMessageFor(TAG, e) },
+                        )
+                    }
                 }
                 .onFailure { error ->
                     _uiState.update { it.copy(isLoading = false, error = userMessageFor(TAG, error)) }
@@ -123,6 +131,8 @@ data class ArtistUiState(
     val songsLoadMore: LoadMoreState = LoadMoreState(),
     val albums: List<Album> = emptyList(),
     val albumsLoadMore: LoadMoreState = LoadMoreState(),
+    val songsError: String? = null,
+    val albumsError: String? = null,
     /** Set while 播放全部 / 隨機播放 waits for the remaining songs. */
     val playAllPending: PlayAllMode? = null,
     val selectedTab: ArtistTab = ArtistTab.Songs,

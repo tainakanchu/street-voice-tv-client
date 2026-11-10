@@ -62,7 +62,7 @@ class AlbumLoadMoreTest {
 
         // Nothing more to load: no further request.
         vm.loadMore()
-        assertEquals(listOf("getAlbumSongs(1, offset=0)", "getAlbumSongs(1, offset=30)"),
+        assertEquals(listOf("getAlbumSongs(1)", "getAlbumSongs(1, offset=30)"),
             repository.calls.filter { it.startsWith("getAlbumSongs") })
     }
 

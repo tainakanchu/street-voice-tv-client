@@ -18,7 +18,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -65,7 +65,7 @@ fun ArtistScreen(
     onBack: () -> Unit,
     viewModel: ArtistViewModel = hiltViewModel(),
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     ArtistContent(
         uiState = uiState,
@@ -231,7 +231,9 @@ fun ArtistContent(
                 when (uiState.selectedTab) {
                     ArtistTab.Songs -> {
                         if (uiState.songs.isEmpty()) {
-                            item(key = "empty_songs") { EmptyTab("沒有歌曲") }
+                            item(key = "empty_songs") {
+                                EmptyTab(uiState.songsError ?: "沒有歌曲", isError = uiState.songsError != null)
+                            }
                         } else {
                             item(key = "play_all") {
                                 PlayAllButtons(
@@ -256,7 +258,9 @@ fun ArtistContent(
 
                     ArtistTab.Albums -> {
                         if (uiState.albums.isEmpty()) {
-                            item(key = "empty_albums") { EmptyTab("沒有專輯") }
+                            item(key = "empty_albums") {
+                                EmptyTab(uiState.albumsError ?: "沒有專輯", isError = uiState.albumsError != null)
+                            }
                         } else {
                             itemsIndexed(uiState.albums, key = { _, it -> "album_${it.id}" }) { index, album ->
                                 AlbumListItem(
@@ -278,7 +282,7 @@ fun ArtistContent(
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun EmptyTab(text: String) {
+private fun EmptyTab(text: String, isError: Boolean = false) {
     Box(
         Modifier
             .fillMaxWidth()
@@ -288,7 +292,7 @@ private fun EmptyTab(text: String) {
         Text(
             text = text,
             style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

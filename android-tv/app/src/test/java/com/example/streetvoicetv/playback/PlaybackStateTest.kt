@@ -46,7 +46,8 @@ class PlaybackStateTest {
         assertFalse(shuffleSingle.hasNext)
         assertFalse(shuffleSingle.hasPrevious)
 
-        val shuffleMany = PlaybackState(queueSize = 2, queueIndex = 1, shuffleEnabled = true)
-        assertTrue(shuffleMany.hasNext)
+        // The defaults ignore shuffle; PlaybackManager passes exact values from PlaybackQueue.
+        val explicit = PlaybackState(queueSize = 2, queueIndex = 1, shuffleEnabled = true, nextAvailable = true)
+        assertTrue(explicit.hasNext)
     }
 }

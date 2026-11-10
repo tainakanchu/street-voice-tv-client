@@ -62,4 +62,16 @@ class AlbumViewModelTest {
         assertEquals(UserMessages.NOT_FOUND, vm.uiState.value.error)
         assertTrue(repository.calls.isEmpty())
     }
+
+    @Test
+    fun `songs failure is surfaced instead of an empty album`() {
+        repository.albumDetailResult = Result.success(album)
+        repository.albumSongsResult = Result.failure(RuntimeException("boom"))
+
+        val state = AlbumViewModel(repository, SavedStateHandle(mapOf("albumId" to 1))).uiState.value
+        assertEquals(album, state.album)
+        assertTrue(state.songs.isEmpty())
+        assertEquals(UserMessages.LOAD_FAILED, state.songsError)
+        assertNull(state.error)
+    }
 }

@@ -42,10 +42,13 @@ internal fun SupportingText(text: String, modifier: Modifier = Modifier) {
 
 /**
  * Supporting row: an optional, shrinkable [primary] text (e.g. an artist name, ellipsized
- * when too long) followed by fixed [trailing] texts (durations, counts) that are never pushed out.
+ * when too long) followed by fixed trailing texts (durations, counts) that are never pushed out.
+ *
+ * Fixed String parameters (no vararg array, which is a new instance on every call) so the
+ * row can be skipped when nothing changed.
  */
 @Composable
-internal fun SupportingRow(primary: String?, vararg trailing: String) {
+internal fun SupportingRow(primary: String?, trailing: String? = null, trailing2: String? = null) {
     Row(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -53,6 +56,7 @@ internal fun SupportingRow(primary: String?, vararg trailing: String) {
         if (primary != null) {
             SupportingText(primary, Modifier.weight(1f, fill = false))
         }
-        trailing.forEach { SupportingText(it) }
+        if (trailing != null) SupportingText(trailing)
+        if (trailing2 != null) SupportingText(trailing2)
     }
 }

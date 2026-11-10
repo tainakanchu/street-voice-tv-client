@@ -25,6 +25,10 @@ interface StreetVoiceRepository {
     suspend fun likeSong(songId: Int): Result<Unit>
     suspend fun unlikeSong(songId: Int): Result<Unit>
 
+    // Session
+    /** Username of the logged-in user (`/user/me/`). Fails when the session is not valid. */
+    suspend fun getCurrentUsername(): Result<String>
+
     // Artist
     suspend fun getArtistDetail(username: String): Result<Artist>
     suspend fun getArtistSongs(username: String, limit: Int = DEFAULT_PAGE_SIZE, offset: Int = 0): Result<Page<Song>>

@@ -11,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,17 +30,14 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.playback.PlaybackState
 import com.example.streetvoicetv.ui.theme.Dimens
 
 /** Test tag of the NowPlayingBar container. */
 const val NOW_PLAYING_BAR_TAG = "now_playing_bar"
 
-/**
- * Compact "now playing" chip shown at the bottom-end of the screen.
- * Width is capped at [Dimens.NowPlayingBarMaxWidth]; long titles are ellipsized.
- */
-@OptIn(ExperimentalTvMaterial3Api::class)
+/** Convenience overload taking the whole [PlaybackState]; prefer the narrow one (fewer recompositions). */
 @Composable
 fun NowPlayingBar(
     playbackState: PlaybackState,
@@ -48,6 +46,32 @@ fun NowPlayingBar(
     modifier: Modifier = Modifier,
 ) {
     val song = playbackState.song ?: return
+    NowPlayingBar(
+        song = song,
+        isPlaying = playbackState.isPlaying,
+        error = playbackState.error,
+        onTap = onTap,
+        onTogglePlayPause = onTogglePlayPause,
+        modifier = modifier,
+    )
+}
+
+/**
+ * Compact "now playing" chip shown at the bottom-end of the screen.
+ * Width is capped at [Dimens.NowPlayingBarMaxWidth]; long titles are ellipsized.
+ * Takes only what it shows (no position), so playback progress never recomposes it.
+ * On a playback [error] the artist line shows the error and the button retries.
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun NowPlayingBar(
+    song: Song,
+    isPlaying: Boolean,
+    error: String?,
+    onTap: () -> Unit,
+    onTogglePlayPause: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
 
     Row(
         modifier = modifier
@@ -92,9 +116,13 @@ fun NowPlayingBar(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        text = song.artistName,
+                        text = error ?: song.artistName,
                         style = MaterialTheme.typography.bodySmall,
-                        color = LocalContentColor.current.copy(alpha = 0.7f),
+                        color = if (error != null) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            LocalContentColor.current.copy(alpha = 0.7f)
+                        },
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -107,8 +135,16 @@ fun NowPlayingBar(
             scale = IconButtonDefaults.scale(focusedScale = 1.05f),
         ) {
             Icon(
-                imageVector = if (playbackState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                contentDescription = if (playbackState.isPlaying) "暫停" else "播放",
+                imageVector = when {
+                    error != null -> Icons.Default.Refresh
+                    isPlaying -> Icons.Default.Pause
+                    else -> Icons.Default.PlayArrow
+                },
+                contentDescription = when {
+                    error != null -> "重試"
+                    isPlaying -> "暫停"
+                    else -> "播放"
+                },
             )
         }
     }

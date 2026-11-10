@@ -32,19 +32,19 @@ class StreetVoiceRepositoryImpl @Inject constructor(
     // --- Search ---
 
     override suspend fun searchSongs(query: String, limit: Int, offset: Int): Result<Page<Song>> {
-        return apiCatching {
+        return runCatchingCancellable {
             api.searchSongs(query, limit, offset).let { pageOf(it.count, it.offset, it.next, it.results) { r -> r.toDomain() } }
         }
     }
 
     override suspend fun searchArtists(query: String, limit: Int, offset: Int): Result<Page<Artist>> {
-        return apiCatching {
+        return runCatchingCancellable {
             api.searchUsers(query, limit, offset).let { pageOf(it.count, it.offset, it.next, it.results) { r -> r.toDomain() } }
         }
     }
 
     override suspend fun searchPlaylists(query: String, limit: Int, offset: Int): Result<Page<Playlist>> {
-        return apiCatching {
+        return runCatchingCancellable {
             api.searchPlaylists(query, limit, offset).let { pageOf(it.count, it.offset, it.next, it.results) { r -> r.toDomain() } }
         }
     }
@@ -52,53 +52,59 @@ class StreetVoiceRepositoryImpl @Inject constructor(
     // --- Song ---
 
     override suspend fun getSongDetail(songId: Int): Result<Song> {
-        return apiCatching {
+        return runCatchingCancellable {
             api.getSongDetail(songId).toDomain()
         }
     }
 
     override suspend fun getStreamUrl(songId: Int): Result<PlayableStream> {
-        return apiCatching {
+        return runCatchingCancellable {
             PlayableStream(songId = songId, hlsUrl = api.getStreamUrl(songId).file)
         }
     }
 
     override suspend fun likeSong(songId: Int): Result<Unit> {
-        return apiCatching { api.likeSong(songId) }
+        return runCatchingCancellable { api.likeSong(songId) }
     }
 
     override suspend fun unlikeSong(songId: Int): Result<Unit> {
-        return apiCatching { api.unlikeSong(songId) }
+        return runCatchingCancellable { api.unlikeSong(songId) }
+    }
+
+    // --- Session ---
+
+    override suspend fun getCurrentUsername(): Result<String> {
+        return runCatchingCancellable { api.getCurrentUser().username }
     }
 
     // --- Artist ---
 
     override suspend fun getArtistDetail(username: String): Result<Artist> {
-        return apiCatching {
+        return runCatchingCancellable {
             api.getUserDetail(username).toDomain()
         }
     }
 
     override suspend fun getArtistSongs(username: String, limit: Int, offset: Int): Result<Page<Song>> {
-        return apiCatching {
+        return runCatchingCancellable {
             api.getUserSongs(username, limit, offset).let { pageOf(it.count, it.offset, it.next, it.results) { r -> r.toDomain() } }
         }
     }
 
     override suspend fun getArtistAlbums(username: String, limit: Int, offset: Int): Result<Page<Album>> {
-        return apiCatching {
+        return runCatchingCancellable {
             api.getUserAlbums(username, limit, offset).let { pageOf(it.count, it.offset, it.next, it.results) { r -> r.toDomain() } }
         }
     }
 
     override suspend fun getArtistPlaylists(username: String, limit: Int, offset: Int): Result<List<Playlist>> {
-        return apiCatching {
+        return runCatchingCancellable {
             api.getUserPlaylists(username, limit, offset).results.map { it.toDomain() }
         }
     }
 
     override suspend fun getLikedSongs(username: String, limit: Int, offset: Int): Result<Page<Song>> {
-        return apiCatching {
+        return runCatchingCancellable {
             api.getUserLikedSongs(username, limit, offset)
                 .let { pageOf(it.count, it.offset, it.next, it.results) { r -> r.contentObject.toDomain() } }
         }
@@ -107,13 +113,13 @@ class StreetVoiceRepositoryImpl @Inject constructor(
     // --- Album ---
 
     override suspend fun getAlbumDetail(albumId: Int): Result<Album> {
-        return apiCatching {
+        return runCatchingCancellable {
             api.getAlbumDetail(albumId).toDomain()
         }
     }
 
     override suspend fun getAlbumSongs(albumId: Int, limit: Int, offset: Int): Result<Page<Song>> {
-        return apiCatching {
+        return runCatchingCancellable {
             api.getAlbumSongs(albumId, limit, offset).let { pageOf(it.count, it.offset, it.next, it.results) { r -> r.toDomain() } }
         }
     }
@@ -121,31 +127,31 @@ class StreetVoiceRepositoryImpl @Inject constructor(
     // --- Home / Discover ---
 
     override suspend fun getRealtimeChart(limit: Int): Result<List<Song>> {
-        return apiCatching {
+        return runCatchingCancellable {
             api.getRealtimeChart(limit = limit).results.map { it.song.toDomain() }
         }
     }
 
     override suspend fun getEditorChoice(limit: Int): Result<List<Song>> {
-        return apiCatching {
+        return runCatchingCancellable {
             api.getEditorChoice(limit = limit).results.map { it.contentObject.toDomain() }
         }
     }
 
     override suspend fun getPlaylistDetail(playlistId: Int): Result<Playlist> {
-        return apiCatching {
+        return runCatchingCancellable {
             api.getPlaylistDetail(playlistId).toDomain()
         }
     }
 
     override suspend fun getRecommendedPlaylists(limit: Int): Result<List<Playlist>> {
-        return apiCatching {
+        return runCatchingCancellable {
             api.getSectionPlaylists(sectionId = 1, limit = limit).results.map { it.toDomain() }
         }
     }
 
     override suspend fun getPlaylistSongs(playlistId: Int, limit: Int, offset: Int): Result<Page<Song>> {
-        return apiCatching {
+        return runCatchingCancellable {
             api.getPlaylistSongs(playlistId, limit, offset)
                 .let { pageOf(it.count, it.offset, it.next, it.results) { r -> r.song.toDomain() } }
         }
@@ -153,10 +159,10 @@ class StreetVoiceRepositoryImpl @Inject constructor(
 }
 
 /**
- * Like [runCatching], but lets [CancellationException] propagate so a cancelled caller
- * (e.g. a superseded load) stops instead of seeing a failed [Result].
+ * Like [runCatching], but rethrows [CancellationException] so that a cancelled
+ * coroutine (e.g. a superseded search) stops instead of reporting a "failure".
  */
-private inline fun <T> apiCatching(block: () -> T): Result<T> =
+internal inline fun <T> runCatchingCancellable(block: () -> T): Result<T> =
     try {
         Result.success(block())
     } catch (e: CancellationException) {
@@ -192,10 +198,10 @@ private fun SearchSongResult.toDomain(): Song = Song(
     playsCount = playsCount,
 )
 
-private fun SongDetailResponse.toDomain(): Song = Song(
+internal fun SongDetailResponse.toDomain(): Song = Song(
     id = id,
     name = name,
-    artistName = user.profile?.nickname ?: user.username,
+    artistName = user.displayNickname ?: user.username,
     artistUsername = user.username,
     imageUrl = image,
     durationSeconds = length,
@@ -210,7 +216,7 @@ private fun SongDetailResponse.toDomain(): Song = Song(
     albumId = album?.id,
     albumName = album?.name,
     albumImageUrl = album?.image,
-    artistProfileImageUrl = user.profile?.image,
+    artistProfileImageUrl = user.displayImage,
     isLiked = isLike,
 )
 

@@ -1,7 +1,10 @@
 package com.example.streetvoicetv.data.repository
 
+import android.app.Application
+import android.content.Context
 import com.example.streetvoicetv.data.api.ApiConfig
 import com.example.streetvoicetv.data.api.StreetVoiceApi
+import com.example.streetvoicetv.data.auth.SessionManager
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
@@ -13,7 +16,13 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [35], application = Application::class)
 /** Pagination mapping of list responses (`{count, offset, limit, next, previous, results}`). */
 class StreetVoiceRepositoryImplTest {
 
@@ -28,7 +37,11 @@ class StreetVoiceRepositoryImplTest {
             isLenient = true
             coerceInputValues = true
         }
-        val api = StreetVoiceApi(OkHttpClient(), json, ApiConfig(server.url("").toString().trimEnd('/')))
+        val prefs = RuntimeEnvironment.getApplication()
+            .getSharedPreferences("repository_test_session", Context.MODE_PRIVATE)
+        prefs.edit().clear().commit()
+        val session = SessionManager(prefs) {}
+        val api = StreetVoiceApi(OkHttpClient(), json, ApiConfig(server.url("").toString().trimEnd('/')), session)
         repository = StreetVoiceRepositoryImpl(api)
     }
 

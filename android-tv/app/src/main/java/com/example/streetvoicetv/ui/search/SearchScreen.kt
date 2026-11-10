@@ -24,7 +24,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
@@ -79,8 +79,8 @@ fun SearchScreen(
     onPlaylistSelected: (Playlist) -> Unit,
     viewModel: SearchViewModel = hiltViewModel(),
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    val searchHistory by viewModel.history.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val searchHistory by viewModel.history.collectAsStateWithLifecycle()
 
     SearchContent(
         uiState = uiState,
@@ -226,33 +226,32 @@ fun SearchContent(
                     contentPadding = screenListPadding(bottomInset, top = 8.dp),
                 ) {
                     if (uiState.artists.isNotEmpty()) {
-                        item(key = "h_artists") { SectionHeader("音樂人") }
-                        itemsIndexed(uiState.artists, key = { _, it -> "artist_${it.id}" }) { index, artist ->
+                        item(key = "h_artists", contentType = "header") { SectionHeader("音樂人") }
+                        itemsIndexed(uiState.artists, key = { _, it -> "artist_${it.id}" }, contentType = { _, _ -> "artist" }) { index, artist ->
                             ArtistListItem(
                                 artist = artist,
                                 onClick = { onArtistSelected(artist) },
                                 modifier = Modifier.firstResult(0, index),
                             )
                         }
-                        item(key = "s_artists") { Spacer(modifier = Modifier.height(12.dp)) }
+                        item(key = "s_artists", contentType = "spacer") { Spacer(modifier = Modifier.height(12.dp)) }
                     }
 
                     if (uiState.playlists.isNotEmpty()) {
-                        item(key = "h_playlists") { SectionHeader("歌單") }
-                        itemsIndexed(uiState.playlists, key = { _, it -> "playlist_${it.id}" }) { index, playlist ->
+                        item(key = "h_playlists", contentType = "header") { SectionHeader("歌單") }
+                        itemsIndexed(uiState.playlists, key = { _, it -> "playlist_${it.id}" }, contentType = { _, _ -> "playlist" }) { index, playlist ->
                             PlaylistListItem(
                                 playlist = playlist,
                                 onClick = { onPlaylistSelected(playlist) },
                                 modifier = Modifier.firstResult(1, index),
                             )
                         }
-                        item(key = "s_playlists") { Spacer(modifier = Modifier.height(12.dp)) }
+                        item(key = "s_playlists", contentType = "spacer") { Spacer(modifier = Modifier.height(12.dp)) }
                     }
 
                     if (uiState.songs.isNotEmpty()) {
-                        item(key = "h_songs") { SectionHeader("歌曲") }
-                        // Playing a song queues the songs loaded so far.
-                        itemsIndexed(uiState.songs, key = { _, it -> "song_${it.id}" }) { index, song ->
+                        item(key = "h_songs", contentType = "header") { SectionHeader("歌曲") }
+                        itemsIndexed(uiState.songs, key = { _, it -> "song_${it.id}" }, contentType = { _, _ -> "song" }) { index, song ->
                             SongListItem(
                                 song = song,
                                 onClick = { onSongSelected(song, uiState.songs) },

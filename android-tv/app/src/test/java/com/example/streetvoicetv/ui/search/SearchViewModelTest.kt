@@ -3,11 +3,11 @@ package com.example.streetvoicetv.ui.search
 import com.example.streetvoicetv.ui.common.UserMessages
 import android.app.Application
 import com.example.streetvoicetv.data.SearchHistoryManager
+import com.example.streetvoicetv.domain.model.Page
 import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.testutil.FakeStreetVoiceRepository
 import com.example.streetvoicetv.testutil.MainDispatcherRule
-import com.example.streetvoicetv.testutil.lastPage
-import com.example.streetvoicetv.domain.model.Page
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -43,9 +43,9 @@ class SearchViewModelTest {
 
     @Test
     fun `search trims query, records history and shows partial results`() {
-        repository.searchSongs = { _, _ -> lastPage(listOf(song)) }
+        repository.searchSongsResult = Result.success(listOf(song))
         repository.searchArtistsResult = Result.failure(RuntimeException("artists down"))
-        repository.searchPlaylistsResult = lastPage(emptyList())
+        repository.searchPlaylistsResult = Result.success(emptyList())
 
         vm.onQueryChange("  周杰倫 ")
         vm.search()
@@ -61,7 +61,7 @@ class SearchViewModelTest {
 
     @Test
     fun `all searches failing surfaces an error`() {
-        repository.searchSongs = { _, _ -> Result.failure(RuntimeException("offline")) }
+        repository.searchSongsResult = Result.failure(RuntimeException("offline"))
         repository.searchArtistsResult = Result.failure(RuntimeException("offline"))
         repository.searchPlaylistsResult = Result.failure(RuntimeException("offline"))
 
@@ -74,14 +74,48 @@ class SearchViewModelTest {
     }
 
     @Test
+    fun `a newer search cancels the older one so stale results never show`() {
+        val slow = CompletableDeferred<Result<List<Song>>>()
+        var slowCancelled = false
+        repository.onSearchSongs = { query ->
+            if (query == "old") {
+                try {
+                    slow.await()
+                } catch (e: CancellationException) {
+                    slowCancelled = true
+                    throw e
+                }
+            } else {
+                Result.success(listOf(song))
+            }
+        }
+        repository.searchArtistsResult = Result.success(emptyList())
+        repository.searchPlaylistsResult = Result.success(emptyList())
+
+        vm.onQueryChange("old")
+        vm.search()
+        assertTrue(vm.uiState.value.isLoading)
+
+        vm.onQueryChange("new")
+        vm.search()
+        assertTrue(slowCancelled)
+        assertEquals(listOf(song), vm.uiState.value.songs)
+
+        // Even if the old request completes late, nothing changes.
+        slow.complete(Result.success(listOf(song.copy(id = 99, name = "stale"))))
+        assertEquals(listOf(song), vm.uiState.value.songs)
+        assertFalse(vm.uiState.value.isLoading)
+    }
+
+    @Test
     fun `songs load more, and a new search drops the pending page of the old one`() {
         val stale = CompletableDeferred<Result<Page<Song>>>()
         val first = List(20) { Song(it, "歌 $it", "a", "a", null, 1.0, 0) }
         repository.searchSongs = { offset, _ ->
             if (offset == 0) Result.success(Page(first, 100, 20)) else stale.await()
         }
-        repository.searchArtistsResult = lastPage(emptyList())
-        repository.searchPlaylistsResult = lastPage(emptyList())
+        repository.searchArtistsResult = Result.success(emptyList())
+        repository.searchPlaylistsResult = Result.success(emptyList())
 
         vm.onQueryChange("lofi")
         vm.search()

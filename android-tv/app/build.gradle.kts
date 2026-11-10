@@ -100,6 +100,15 @@ roborazzi {
     outputDir.set(file("src/test/screenshots"))
 }
 
+// Compose compiler stability / skippability reports: ./gradlew assembleRelease -PcomposeReports=true
+// → app/build/compose_compiler/{reports,metrics}
+if (providers.gradleProperty("composeReports").orNull == "true") {
+    composeCompiler {
+        reportsDestination = layout.buildDirectory.dir("compose_compiler/reports")
+        metricsDestination = layout.buildDirectory.dir("compose_compiler/metrics")
+    }
+}
+
 dependencies {
     // Compose BOM
     val composeBom = platform(libs.compose.bom)
@@ -131,6 +140,7 @@ dependencies {
     implementation(libs.media3.exoplayer.hls)
     implementation(libs.media3.ui)
     implementation(libs.media3.session)
+    implementation(libs.media3.datasource.okhttp)
 
     // Hilt
     implementation(libs.hilt.android)
