@@ -1,341 +1,463 @@
 package com.example.streetvoicetv.playback
 
 import android.content.Context
-import android.util.Log
-import androidx.annotation.OptIn
-import androidx.media3.common.MediaItem
-import androidx.media3.common.MediaMetadata
+import android.content.Intent
+import android.view.KeyEvent
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
-import androidx.media3.common.util.UnstableApi
-import androidx.media3.datasource.DefaultHttpDataSource
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.hls.HlsMediaSource
-import androidx.media3.session.MediaSession
 import com.example.streetvoicetv.data.api.StreetVoiceApi
+import com.example.streetvoicetv.domain.model.PlayableStream
 import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.domain.repository.StreetVoiceRepository
+import com.example.streetvoicetv.ui.common.UserMessages
+import com.example.streetvoicetv.ui.common.userMessageFor
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.isActive
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import okhttp3.OkHttpClient
+import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.random.Random
 
+/**
+ * App-facing playback API (Hilt singleton): owns the queue, fetches signed HLS URLs and drives
+ * the [PlaybackEngine]. The Media3 session around [sessionPlayer] lives in [PlaybackService],
+ * which is started when playback starts so it keeps playing in the background.
+ *
+ * Loading model: switching song commits the queue position immediately, silences the old song,
+ * cancels any in-flight URL fetch and tags the load with a generation number; results and player
+ * events from older generations are ignored. [state] therefore always shows the song that is
+ * (being) loaded, with [PlaybackState.isLoading] while its URL is fetched / buffered.
+ */
 @Singleton
-class PlaybackManager @Inject constructor(
-    @ApplicationContext private val context: Context,
-    private val repository: StreetVoiceRepository,
-    private val api: StreetVoiceApi,
+class PlaybackManager internal constructor(
+    private val engine: PlaybackEngine,
+    private val settings: PlaybackSettings,
+    private val fetchStream: suspend (songId: Int) -> Result<PlayableStream>,
+    private val reportPlay: suspend (songId: Int) -> Unit,
+    private val startService: () -> Unit,
+    private val stopService: () -> Unit,
+    dispatcher: CoroutineDispatcher,
+    random: Random = Random.Default,
+    private val retryDelayMs: Long = RETRY_DELAY_MS,
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-    private var progressJob: Job? = null
+    @Inject
+    constructor(
+        @ApplicationContext context: Context,
+        repository: StreetVoiceRepository,
+        api: StreetVoiceApi,
+        httpClient: dagger.Lazy<OkHttpClient>,
+    ) : this(
+        engine = ExoPlaybackEngine(context) { httpClient.get() },
+        settings = SharedPreferencesPlaybackSettings(context),
+        fetchStream = { repository.getStreamUrl(it) },
+        reportPlay = { api.reportPlay(it) },
+        startService = { PlaybackService.start(context) },
+        stopService = { context.stopService(Intent(context, PlaybackService::class.java)) },
+        dispatcher = Dispatchers.Main.immediate,
+    )
 
-    // Shuffle & Repeat (persisted via SharedPreferences)
-    private val prefs = context.getSharedPreferences("playback_settings", Context.MODE_PRIVATE)
-    private var shuffleEnabled = prefs.getBoolean(KEY_SHUFFLE, false)
-    private var repeatMode = RepeatMode.entries.getOrElse(prefs.getInt(KEY_REPEAT, 0)) { RepeatMode.OFF }
-    private var shuffledIndices: List<Int> = emptyList()
-    private var shufflePosition: Int = -1
+    private val scope = CoroutineScope(SupervisorJob() + dispatcher)
 
-    private val _state = MutableStateFlow(PlaybackState(shuffleEnabled = shuffleEnabled, repeatMode = repeatMode))
+    private val queue = PlaybackQueue(random).apply {
+        setShuffle(settings.shuffleEnabled)
+        repeatMode = settings.repeatMode
+    }
+
+    private val _state = MutableStateFlow(
+        PlaybackState(shuffleEnabled = queue.shuffleEnabled, repeatMode = queue.repeatMode)
+    )
+
+    /** Discrete playback state (does not tick with the position). */
     val state: StateFlow<PlaybackState> = _state.asStateFlow()
 
+    private val _positionMs = MutableStateFlow(0L)
+
+    /** Live playback position; ticks about once a second while playing. Collect only in progress UI. */
+    val positionMs: StateFlow<Long> = _positionMs.asStateFlow()
+
+    /** Song / playing / error only, for the app chrome (NowPlayingBar). */
+    val nowPlaying: StateFlow<NowPlaying> = _state
+        .map { NowPlaying(it.song, it.isPlaying, it.error) }
+        .stateIn(scope, SharingStarted.Eagerly, NowPlaying())
+
+    /** Player handed to the MediaSession: routes next / previous / play to the queue logic. */
+    val sessionPlayer: Player by lazy { QueueForwardingPlayer(engine.asPlayer(), this) }
+
+    private var generation = 0
+    private var loadedGeneration = -1
+    private var loading = false
+    private var error: String? = null
+    private var durationMs = 0L
+    private var resumePositionMs = 0L
+    private var retryCount = 0
+    private var playReported = false
+    private var loadJob: Job? = null
+    private var tickerJob: Job? = null
+
+    private val isLoaded: Boolean get() = loadedGeneration == generation
+
+    init {
+        engine.setListener(object : PlaybackEngine.Listener {
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                if (!isLoaded) return
+                if (isPlaying) {
+                    retryCount = 0
+                    reportPlayOnce()
+                }
+                updateTicker()
+                publish()
+            }
+
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean) = publish()
+
+            override fun onPlaybackStateChanged(state: Int) {
+                if (!isLoaded) return
+                when (state) {
+                    Player.STATE_READY -> durationMs = engine.duration
+                    Player.STATE_ENDED -> onEnded()
+                }
+                publish()
+            }
+
+            override fun onError(error: PlaybackException) {
+                if (!isLoaded) return
+                stopTicker()
+                val position = engine.currentPosition.takeIf { it > 0 } ?: _positionMs.value
+                _positionMs.value = position
+                handleFailure(
+                    transient = error.isTransient(),
+                    message = if (error.isNetworkError()) UserMessages.NETWORK else UserMessages.PLAYBACK_FAILED,
+                    resumeAtMs = position,
+                )
+            }
+        })
+    }
+
+    // ---------------------------------------------------------------------------------------
     // Queue
-    private var queue: List<Song> = emptyList()
-    private var currentIndex: Int = -1
+    // ---------------------------------------------------------------------------------------
 
-    @OptIn(UnstableApi::class)
-    private val dataSourceFactory = DefaultHttpDataSource.Factory()
-        .setUserAgent("StreetVoiceTV/1.0")
-        .setDefaultRequestProperties(mapOf("Referer" to "https://streetvoice.com/"))
-
-    val player: ExoPlayer by lazy {
-        ExoPlayer.Builder(context).build().apply {
-            volume = 0.7f
-            addListener(playerListener)
-        }
-    }
-
-    val mediaSession: MediaSession by lazy {
-        MediaSession.Builder(context, player).build()
-    }
-
-    private val playerListener = object : Player.Listener {
-        override fun onIsPlayingChanged(isPlaying: Boolean) {
-            _state.value = _state.value.copy(isPlaying = isPlaying)
-            if (isPlaying) startProgressTracking() else stopProgressTracking()
-        }
-
-        override fun onPlaybackStateChanged(playbackState: Int) {
-            if (playbackState == Player.STATE_ENDED) {
-                _state.value = _state.value.copy(isPlaying = false)
-                stopProgressTracking()
-                if (repeatMode == RepeatMode.ONE) {
-                    player.seekTo(0)
-                    player.play()
-                } else {
-                    playNext()
-                }
-            }
-        }
-
-        override fun onPlayerError(error: PlaybackException) {
-            _state.value = _state.value.copy(
-                error = error.message ?: "Playback error",
-                isPlaying = false,
-            )
-            stopProgressTracking()
-        }
-    }
-
-    /** キューだけセットする (再生開始は PlayerViewModel が行う) */
-    fun setQueue(songs: List<Song>, startIndex: Int) {
-        queue = songs
-        currentIndex = startIndex
-        if (shuffleEnabled) generateShuffledIndices()
-    }
-
-    /** キュー付きで再生を開始する */
-    fun playWithQueue(songs: List<Song>, startIndex: Int, hlsUrl: String) {
-        queue = songs
-        currentIndex = startIndex
-        val song = songs[startIndex]
-        startPlayback(song, hlsUrl)
-    }
-
-    /** 単曲再生 (キューなし) */
-    fun play(song: Song, hlsUrl: String) {
-        queue = listOf(song)
-        currentIndex = 0
-        startPlayback(song, hlsUrl)
-    }
-
-    /** キューが既にセットされていればそれを使い、なければ単曲再生 */
-    fun playCurrentInQueue(song: Song, hlsUrl: String) {
-        if (queue.isNotEmpty() && currentIndex in queue.indices && queue[currentIndex].id == song.id) {
-            startPlayback(song, hlsUrl)
+    /**
+     * Replaces the queue and plays [songs]`[startIndex]` (atomically: the old song stops at once).
+     * If that song is already the current one and healthy, playback just continues.
+     */
+    fun playQueue(songs: List<Song>, startIndex: Int) {
+        if (songs.isEmpty()) return
+        val index = startIndex.coerceIn(songs.indices)
+        val current = queue.current
+        val continueCurrent = current != null && current.id == songs[index].id &&
+            error == null && (loading || isLoaded)
+        queue.replace(songs, index)
+        if (continueCurrent) {
+            queue.updateCurrent(current!!) // keep the richer (detail) object
+            if (isLoaded && engine.playbackState == Player.STATE_ENDED) resume()
+            publish()
         } else {
-            play(song, hlsUrl)
+            retryCount = 0
+            loadCurrent(startPositionMs = 0, newPlay = true)
         }
     }
 
-    @OptIn(UnstableApi::class)
-    private fun startPlayback(song: Song, hlsUrl: String) {
-        _state.value = PlaybackState(
-            song = song,
-            isPlaying = false,
-            error = null,
-            queueSize = queue.size,
-            queueIndex = currentIndex,
-            shuffleEnabled = shuffleEnabled,
-            repeatMode = repeatMode,
-        )
+    /** Same as [playQueue] (kept for callers that select a song from a list). */
+    fun setQueue(songs: List<Song>, startIndex: Int) = playQueue(songs, startIndex)
 
-        val mediaItem = MediaItem.Builder()
-            .setUri(hlsUrl)
-            .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setTitle(song.name)
-                    .setArtist(song.artistName)
-                    .setAlbumTitle(song.albumName)
-                    .build()
-            )
-            .build()
-
-        val hlsSource = HlsMediaSource.Factory(dataSourceFactory)
-            .createMediaSource(mediaItem)
-
-        player.setMediaSource(hlsSource)
-        player.prepare()
-        player.playWhenReady = true
-
-        // Report play event (fire-and-forget)
-        scope.launch {
-            try { api.reportPlay(song.id) } catch (_: Exception) { }
-        }
+    /** Replaces the current song with its full details (lyrics, synopsis...) if it is still current. */
+    fun updateSongDetail(song: Song) {
+        if (queue.updateCurrent(song)) publish()
     }
 
-    /** 次の曲を再生 */
     fun playNext() {
-        if (shuffleEnabled) {
-            val nextPos = shufflePosition + 1
-            if (nextPos >= shuffledIndices.size) {
-                if (repeatMode == RepeatMode.ALL) {
-                    generateShuffledIndices()
-                    loadAndPlay(shuffledIndices[0])
-                } else {
-                    _state.value = _state.value.copy(isPlaying = false)
-                }
-                return
-            }
-            shufflePosition = nextPos
-            loadAndPlay(shuffledIndices[shufflePosition])
-        } else {
-            val nextIndex = currentIndex + 1
-            if (nextIndex >= queue.size) {
-                if (repeatMode == RepeatMode.ALL) {
-                    loadAndPlay(0)
-                } else {
-                    _state.value = _state.value.copy(isPlaying = false)
-                }
-                return
-            }
-            loadAndPlay(nextIndex)
+        if (queue.moveToNext()) {
+            retryCount = 0
+            loadCurrent(startPositionMs = 0, newPlay = true)
         }
     }
 
-    /** 前の曲を再生 */
     fun playPrevious() {
-        // 再生位置が3秒以上なら曲頭に戻す
-        if (player.currentPosition > 3000) {
-            player.seekTo(0)
+        if (error == null && isLoaded && _positionMs.value > RESTART_THRESHOLD_MS) {
+            seekTo(0)
             return
         }
-        if (shuffleEnabled) {
-            val prevPos = shufflePosition - 1
-            if (prevPos < 0) {
-                if (repeatMode == RepeatMode.ALL) {
-                    shufflePosition = shuffledIndices.size - 1
-                    loadAndPlay(shuffledIndices[shufflePosition])
-                } else {
-                    player.seekTo(0)
-                }
-                return
-            }
-            shufflePosition = prevPos
-            loadAndPlay(shuffledIndices[shufflePosition])
+        if (queue.moveToPrevious()) {
+            retryCount = 0
+            loadCurrent(startPositionMs = 0, newPlay = true)
         } else {
-            val prevIndex = currentIndex - 1
-            if (prevIndex < 0) {
-                if (repeatMode == RepeatMode.ALL) {
-                    loadAndPlay(queue.size - 1)
-                } else {
-                    player.seekTo(0)
-                }
-                return
-            }
-            loadAndPlay(prevIndex)
+            seekTo(0)
         }
     }
 
-    private fun loadAndPlay(index: Int) {
-        val song = queue[index]
-        currentIndex = index
-        _state.value = _state.value.copy(
-            song = song,
-            isPlaying = false,
-            error = null,
-            positionMs = 0,
-            durationMs = 0,
-            queueIndex = index,
-        )
+    fun toggleShuffle() {
+        queue.setShuffle(!queue.shuffleEnabled)
+        settings.shuffleEnabled = queue.shuffleEnabled
+        publish()
+    }
 
-        scope.launch {
-            repository.getStreamUrl(song.id)
+    fun toggleRepeatMode() {
+        queue.repeatMode = when (queue.repeatMode) {
+            RepeatMode.OFF -> RepeatMode.ALL
+            RepeatMode.ALL -> RepeatMode.ONE
+            RepeatMode.ONE -> RepeatMode.OFF
+        }
+        settings.repeatMode = queue.repeatMode
+        publish()
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Transport
+    // ---------------------------------------------------------------------------------------
+
+    fun togglePlayPause() {
+        if (_state.value.isPlaying) pause() else resume()
+    }
+
+    fun pause() {
+        engine.pause()
+        publish()
+    }
+
+    /**
+     * Plays. After an error (or if the player was stopped) the stream URL is fetched again —
+     * signed HLS URLs expire — and playback restarts at the last position. At the end of the
+     * queue the current song restarts.
+     */
+    fun resume() {
+        if (queue.current == null) return
+        when {
+            error != null -> {
+                retryCount = 0
+                loadCurrent(startPositionMs = resumePositionMs, newPlay = false)
+            }
+            loading -> engine.play()
+            !isLoaded || engine.playbackState == Player.STATE_IDLE ->
+                loadCurrent(startPositionMs = _positionMs.value, newPlay = false)
+            engine.playbackState == Player.STATE_ENDED -> {
+                playReported = false
+                engine.seekTo(0)
+                _positionMs.value = 0
+                engine.play()
+            }
+            else -> engine.play()
+        }
+        publish()
+    }
+
+    /** Re-fetches the stream and resumes after an error. */
+    fun retry() = resume()
+
+    fun stop() {
+        loadJob?.cancel()
+        generation++
+        loading = false
+        error = null
+        stopTicker()
+        engine.clear()
+        queue.clear()
+        _positionMs.value = 0
+        durationMs = 0
+        publish()
+        stopService()
+    }
+
+    fun seekTo(positionMs: Long) {
+        val target = if (durationMs > 0) positionMs.coerceIn(0, durationMs) else positionMs.coerceAtLeast(0)
+        resumePositionMs = target
+        _positionMs.value = target
+        if (isLoaded && error == null) engine.seekTo(target)
+        publish()
+    }
+
+    /** Relative seek based on the latest target, so repeated presses accumulate (also while paused). */
+    fun seekBy(deltaMs: Long) = seekTo(_positionMs.value + deltaMs)
+
+    /** Handles TV remote media keys that did not reach the MediaSession. */
+    fun handleMediaKey(keyCode: Int): Boolean {
+        if (queue.current == null) return false
+        when (keyCode) {
+            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_HEADSETHOOK -> togglePlayPause()
+            KeyEvent.KEYCODE_MEDIA_PLAY -> resume()
+            KeyEvent.KEYCODE_MEDIA_PAUSE -> pause()
+            KeyEvent.KEYCODE_MEDIA_NEXT -> playNext()
+            KeyEvent.KEYCODE_MEDIA_PREVIOUS -> playPrevious()
+            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> seekBy(MEDIA_KEY_SEEK_MS)
+            KeyEvent.KEYCODE_MEDIA_REWIND -> seekBy(-MEDIA_KEY_SEEK_MS)
+            else -> return false
+        }
+        return true
+    }
+
+    /** True while playback is wanted and running or about to (loading / retrying): keep the service in the foreground. */
+    val isPlaybackActive: Boolean
+        get() = queue.current != null && error == null && engine.playWhenReady &&
+            (loading || (isLoaded && engine.playbackState.let { it == Player.STATE_READY || it == Player.STATE_BUFFERING }))
+
+    val hasMedia: Boolean get() = queue.current != null
+
+    // ---------------------------------------------------------------------------------------
+    // Internals
+    // ---------------------------------------------------------------------------------------
+
+    /**
+     * Loads the current queue song: silences the previous one, cancels any stale load, fetches
+     * the URL and starts it at [startPositionMs]. [newPlay] = a new song (play-count + auto play).
+     */
+    private fun loadCurrent(startPositionMs: Long, newPlay: Boolean) {
+        val song = queue.current ?: return stop()
+        loadJob?.cancel()
+        val gen = ++generation
+        loading = true
+        error = null
+        durationMs = 0
+        resumePositionMs = startPositionMs
+        if (newPlay) playReported = false
+        stopTicker()
+        _positionMs.value = startPositionMs
+        engine.clear() // player events of the old media are now stale (generation changed)
+        engine.play()
+        publish()
+        startService()
+        loadJob = scope.launch {
+            val result = fetchStream(song.id)
+            if (gen != generation) return@launch
+            result
                 .onSuccess { stream ->
-                    startPlayback(song, stream.hlsUrl)
+                    loading = false
+                    loadedGeneration = gen
+                    engine.load(stream.hlsUrl, song, startPositionMs)
+                    publish()
                 }
-                .onFailure { error ->
-                    Log.e("PlaybackManager", "Failed to load next track: ${error.message}")
-                    _state.value = _state.value.copy(
-                        error = "Failed to load next track: ${error.message}",
+                .onFailure { e ->
+                    if (e is CancellationException) return@onFailure
+                    handleFailure(
+                        transient = e is IOException,
+                        message = userMessageFor(TAG, e, UserMessages.PLAYBACK_FAILED),
+                        resumeAtMs = startPositionMs,
                     )
                 }
         }
     }
 
-    fun toggleShuffle() {
-        shuffleEnabled = !shuffleEnabled
-        if (shuffleEnabled) {
-            generateShuffledIndices()
+    private fun handleFailure(transient: Boolean, message: String, resumeAtMs: Long) {
+        resumePositionMs = resumeAtMs
+        if (transient && retryCount < MAX_AUTO_RETRIES) {
+            retryCount++
+            val gen = ++generation
+            loading = true
+            error = null
+            publish()
+            loadJob?.cancel()
+            loadJob = scope.launch {
+                delay(retryDelayMs * retryCount)
+                if (gen == generation) loadCurrent(startPositionMs = resumeAtMs, newPlay = false)
+            }
         } else {
-            shuffledIndices = emptyList()
-            shufflePosition = -1
+            loading = false
+            error = message
+            publish()
         }
-        prefs.edit().putBoolean(KEY_SHUFFLE, shuffleEnabled).apply()
-        _state.value = _state.value.copy(shuffleEnabled = shuffleEnabled)
     }
 
-    fun toggleRepeatMode() {
-        repeatMode = when (repeatMode) {
-            RepeatMode.OFF -> RepeatMode.ALL
-            RepeatMode.ALL -> RepeatMode.ONE
-            RepeatMode.ONE -> RepeatMode.OFF
+    private fun onEnded() {
+        stopTicker()
+        if (queue.repeatMode == RepeatMode.ONE) {
+            playReported = false // each loop counts as a play
+            _positionMs.value = 0
+            engine.seekTo(0)
+            engine.play()
+        } else if (queue.moveToNext()) {
+            loadCurrent(startPositionMs = 0, newPlay = true)
+        } else {
+            _positionMs.value = durationMs
         }
-        prefs.edit().putInt(KEY_REPEAT, repeatMode.ordinal).apply()
-        _state.value = _state.value.copy(repeatMode = repeatMode)
     }
 
-    private fun generateShuffledIndices() {
-        val indices = queue.indices.toMutableList()
-        indices.remove(currentIndex)
-        indices.shuffle()
-        shuffledIndices = listOf(currentIndex) + indices
-        shufflePosition = 0
-    }
-
-    fun togglePlayPause() {
-        if (player.isPlaying) player.pause() else player.play()
-    }
-
-    fun pause() {
-        player.pause()
-    }
-
-    fun resume() {
-        player.play()
-    }
-
-    fun stop() {
-        player.stop()
-        player.clearMediaItems()
-        queue = emptyList()
-        currentIndex = -1
-        _state.value = PlaybackState()
-        stopProgressTracking()
-    }
-
-    fun seekTo(positionMs: Long) {
-        player.seekTo(positionMs)
-    }
-
-    fun release() {
-        stopProgressTracking()
-        mediaSession.release()
-        player.removeListener(playerListener)
-        player.release()
-    }
-
-    private fun startProgressTracking() {
-        stopProgressTracking()
-        progressJob = scope.launch {
-            while (isActive) {
-                val dur = player.duration.coerceAtLeast(0)
-                val pos = player.currentPosition.coerceAtLeast(0)
-                _state.value = _state.value.copy(
-                    positionMs = pos,
-                    durationMs = dur,
-                )
-                delay(500)
+    private fun reportPlayOnce() {
+        if (playReported) return
+        val songId = queue.current?.id ?: return
+        playReported = true
+        scope.launch {
+            try {
+                reportPlay(songId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
             }
         }
     }
 
-    private fun stopProgressTracking() {
-        progressJob?.cancel()
-        progressJob = null
+    private fun updateTicker() {
+        if (!engine.isPlaying) {
+            stopTicker()
+            if (isLoaded) _positionMs.value = engine.currentPosition
+            return
+        }
+        if (tickerJob?.isActive == true) return
+        tickerJob = scope.launch {
+            while (true) {
+                val position = engine.currentPosition
+                _positionMs.value = position
+                // Align to the next whole second so the m:ss text changes on time.
+                delay((1_000 - position % 1_000).coerceAtLeast(MIN_TICK_MS))
+            }
+        }
+    }
+
+    private fun stopTicker() {
+        tickerJob?.cancel()
+        tickerJob = null
+    }
+
+    private fun publish() {
+        val song = queue.current
+        val engineState = if (isLoaded) engine.playbackState else Player.STATE_IDLE
+        val ended = engineState == Player.STATE_ENDED
+        _state.value = PlaybackState(
+            song = song,
+            isPlaying = song != null && engine.playWhenReady && error == null && !ended,
+            positionMs = _positionMs.value,
+            durationMs = durationMs,
+            error = if (song != null) error else null,
+            queueSize = queue.size,
+            queueIndex = queue.currentIndex,
+            shuffleEnabled = queue.shuffleEnabled,
+            repeatMode = queue.repeatMode,
+            isLoading = song != null && error == null && (loading || engineState == Player.STATE_BUFFERING),
+            nextAvailable = queue.hasNext,
+            previousAvailable = queue.hasPrevious,
+        )
     }
 
     companion object {
-        private const val KEY_SHUFFLE = "shuffle_enabled"
-        private const val KEY_REPEAT = "repeat_mode"
+        private const val TAG = "PlaybackManager"
+        const val RESTART_THRESHOLD_MS = 3_000L
+        const val MAX_AUTO_RETRIES = 2
+        private const val RETRY_DELAY_MS = 1_000L
+        private const val MIN_TICK_MS = 50L
+        private const val MEDIA_KEY_SEEK_MS = 10_000L
     }
 }
+
+private fun PlaybackException.isNetworkError(): Boolean = errorCode in
+    PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED..PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
+
+/** Errors worth an automatic retry with a fresh URL: network trouble or an expired / rejected signed URL. */
+private fun PlaybackException.isTransient(): Boolean = isNetworkError() || errorCode in setOf(
+    PlaybackException.ERROR_CODE_IO_UNSPECIFIED,
+    PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS,
+    PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND,
+    PlaybackException.ERROR_CODE_TIMEOUT,
+    PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW,
+)
