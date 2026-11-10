@@ -23,6 +23,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.example.streetvoicetv.data.auth.SessionManager
+import com.example.streetvoicetv.ui.theme.Dimens
 
 private const val LOGIN_URL = "https://streetvoice.com/accounts/login/"
 private const val BASE_URL = "https://streetvoice.com"
@@ -55,24 +56,7 @@ fun LoginScreen(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        // Header
-        Text(
-            text = "登入 StreetVoice（完成後請按返回鍵）",
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 48.dp, vertical = 12.dp),
-        )
-
-        if (isLoading) {
-            LinearProgressIndicator(
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 48.dp),
-            )
-        }
-
+    LoginContent(isLoading = isLoading) {
         // WebView
         AndroidView(
             factory = { context ->
@@ -108,6 +92,43 @@ fun LoginScreen(
             },
             modifier = Modifier.fillMaxSize(),
         )
+    }
+}
+
+/**
+ * Stateless login chrome (header + progress). The WebView is passed as [webContent]
+ * so that it can be replaced with a placeholder in screenshot tests.
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun LoginContent(
+    isLoading: Boolean,
+    webContent: @Composable () -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Header
+        Text(
+            text = "登入 StreetVoice（完成後請按返回鍵）",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(
+                start = Dimens.SafeHorizontal,
+                end = Dimens.SafeHorizontal,
+                top = Dimens.SafeVertical,
+                bottom = 12.dp,
+            ),
+        )
+
+        if (isLoading) {
+            LinearProgressIndicator(
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Dimens.SafeHorizontal),
+            )
+        }
+
+        webContent()
     }
 }
 

@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.example.streetvoicetv.domain.model.Playlist
 import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.domain.repository.StreetVoiceRepository
+import com.example.streetvoicetv.ui.common.UserMessages
+import com.example.streetvoicetv.ui.common.userMessageFor
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,7 +31,7 @@ class PlaylistViewModel @Inject constructor(
         if (playlistId > 0) {
             load()
         } else {
-            _uiState.value = PlaylistUiState(error = "Invalid playlist ID")
+            _uiState.value = PlaylistUiState(error = UserMessages.NOT_FOUND)
         }
     }
 
@@ -48,7 +50,7 @@ class PlaylistViewModel @Inject constructor(
                 playlist = detailResult.getOrNull(),
                 songs = songsResult.getOrDefault(emptyList()),
                 error = if (detailResult.isFailure && songsResult.isFailure)
-                    detailResult.exceptionOrNull()?.message ?: "Failed to load playlist"
+                    userMessageFor(TAG, detailResult.exceptionOrNull())
                 else null,
             )
         }
@@ -56,6 +58,10 @@ class PlaylistViewModel @Inject constructor(
 
     fun retry() {
         if (playlistId > 0) load()
+    }
+
+    private companion object {
+        const val TAG = "PlaylistViewModel"
     }
 }
 

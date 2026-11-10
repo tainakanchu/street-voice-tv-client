@@ -57,7 +57,7 @@ An unofficial client for listening to [StreetVoice](https://streetvoice.com) mus
 ### 前置需求 Prerequisites
 
 - [Nix](https://nixos.org/download/) (推薦 recommended) 或 or:
-  - JDK 17
+  - JDK 21 (tests require 21; app bytecode targets 17)
   - Android SDK (Platform 35, Build Tools 35)
   - Node.js 22+ (僅調查腳本 for research scripts only)
 
@@ -92,6 +92,42 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 # Release
 adb install -r app/build/outputs/apk/release/app-release.apk
 ```
+
+### 測試 Testing
+
+JVM 上執行（Robolectric），不需要實機或模擬器。需要 **JDK 21**（Robolectric 的 Android 15 / SDK 35 runtime 要求）。
+Runs on the JVM via Robolectric — no device/emulator needed. Requires **JDK 21**.
+
+```bash
+cd android-tv
+
+# 單元測試 + 截圖測試（截圖只執行、不比對） Unit tests (+ screenshot tests without comparison)
+./gradlew testDebugUnitTest
+
+# 產生 / 更新截圖 Record screenshots → app/src/test/screenshots/*.png
+./gradlew recordRoborazziDebug
+
+# 與已提交的截圖比對 Compare against committed screenshots (CI runs this)
+./gradlew verifyRoborazziDebug
+```
+
+- 截圖測試位於 `app/src/test/java/com/example/streetvoicetv/screenshot/`，以 1080p Android TV 設定
+  (`w960dp-h540dp-land-television-xhdpi` → 1920×1080px) 渲染每個畫面的 stateless `XxxContent` composable，
+  包含一般資料、超長標題（繁中／日文／英文）、空狀態、載入中、錯誤與焦點狀態。
+  Screenshot tests render each screen's stateless `XxxContent` composable at 1080p TV resolution with normal data,
+  very long titles, empty / loading / error states and focused states. Images are fake solid colours (no network).
+- D-pad 導覽測試位於 `app/src/test/java/com/example/streetvoicetv/navigation/`：以真實的 `KeyEvent`
+  （DPAD 方向鍵／CENTER／BACK）經由 Activity 送出，驗證焦點的移動、捲動後的可見性、對話框的焦點封鎖、
+  返回上一頁後的焦點還原，以及任何按鍵後焦點都不會遺失。小型 DSL 見 `DpadTestSupport.kt`
+  （`dpad(Dpad.Right, Dpad.Down)`、`assertFocusedText(...)`、`assertFocusedFullyVisible()`），
+  關鍵步驟另存 `dpad_*.png` 截圖。
+  D-pad navigation tests drive real key events through the activity and assert where focus lands
+  (rows, NowPlayingBar, dialogs, Back to a previous screen); every key press also fails the test if focus is lost.
+  The fake device reports `FEATURE_LEANBACK` and a D-pad remote, so scrolling and text fields behave as on a TV.
+- `verifyRoborazziDebug` 失敗時，差異圖會輸出到 `app/build/outputs/roborazzi/`（CI 會上傳為 artifact）。
+  On failure, diff images are written to `app/build/outputs/roborazzi/` (uploaded as a CI artifact).
+- UI 有意變更後，執行 `recordRoborazziDebug` 並提交更新後的 PNG。
+  After an intentional UI change, re-run `recordRoborazziDebug` and commit the updated PNGs.
 
 ### 調查腳本 Research Scripts
 

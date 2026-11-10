@@ -1,5 +1,6 @@
 package com.example.streetvoicetv.ui.search
 
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,7 +15,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.CircularProgressIndicator
@@ -23,8 +25,19 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -41,9 +54,18 @@ import com.example.streetvoicetv.domain.model.Playlist
 import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.ui.components.ArtistListItem
 import com.example.streetvoicetv.ui.components.PlaylistListItem
+import com.example.streetvoicetv.ui.components.MessageAction
+import com.example.streetvoicetv.ui.components.MessageState
 import com.example.streetvoicetv.ui.components.SongListItem
+import com.example.streetvoicetv.ui.components.focusRoot
+import com.example.streetvoicetv.ui.components.initialFocus
+import com.example.streetvoicetv.ui.components.rememberInitialFocus
+import com.example.streetvoicetv.ui.components.requestFocusWhenReady
+import com.example.streetvoicetv.ui.theme.Dimens
+import com.example.streetvoicetv.ui.theme.LocalBottomOverlayInset
+import com.example.streetvoicetv.ui.theme.screenListPadding
 
-private val HPad = 48.dp
+private val HPad = Dimens.SafeHorizontal
 
 @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -56,13 +78,51 @@ fun SearchScreen(
     val uiState by viewModel.uiState.collectAsState()
     val searchHistory by viewModel.history.collectAsState()
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        // Title (individually padded)
+    SearchContent(
+        uiState = uiState,
+        searchHistory = searchHistory,
+        onQueryChange = viewModel::onQueryChange,
+        onSearch = { viewModel.search() },
+        onClearError = { viewModel.clearError() },
+        onSelectHistory = { viewModel.selectHistory(it) },
+        onSongSelected = onSongSelected,
+        onArtistSelected = onArtistSelected,
+        onPlaylistSelected = onPlaylistSelected,
+    )
+}
+
+/** Stateless search content (testable without Hilt / network). */
+@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalLayoutApi::class, ExperimentalComposeUiApi::class)
+@Composable
+fun SearchContent(
+    uiState: SearchUiState,
+    searchHistory: List<String>,
+    onQueryChange: (String) -> Unit,
+    onSearch: () -> Unit,
+    onClearError: () -> Unit,
+    onSelectHistory: (String) -> Unit,
+    onSongSelected: (Song, List<Song>) -> Unit,
+    onArtistSelected: (Artist) -> Unit,
+    onPlaylistSelected: (Playlist) -> Unit,
+) {
+    val bottomInset = LocalBottomOverlayInset.current
+    // The text field gets the initial focus unless results / an error claim it.
+    val textFieldFocus = rememberInitialFocus()
+    val showHistory = !uiState.isLoading && uiState.error == null && !uiState.hasResults &&
+        !(uiState.isEmpty && uiState.query.isNotBlank()) && searchHistory.isNotEmpty()
+    val firstChipFocus = remember { FocusRequester() }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .focusRoot(textFieldFocus)
+            .focusGroup(),
+    ) {
         Text(
             text = "StreetVoice",
             style = MaterialTheme.typography.headlineLarge,
             color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(start = HPad, top = 32.dp),
+            modifier = Modifier.padding(start = HPad, top = Dimens.SafeVertical),
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -76,14 +136,22 @@ fun SearchScreen(
         ) {
             OutlinedTextField(
                 value = uiState.query,
-                onValueChange = viewModel::onQueryChange,
-                modifier = Modifier.weight(1f),
+                onValueChange = onQueryChange,
+                modifier = Modifier
+                    .weight(1f)
+                    .initialFocus(
+                        textFieldFocus,
+                        enabled = !uiState.hasResults && uiState.error == null,
+                    )
+                    // Down goes to the first history chip, not to whichever chip happens
+                    // to lie under the centre of the wide text field.
+                    .focusProperties { if (showHistory) down = firstChipFocus },
                 placeholder = {
                     androidx.compose.material3.Text("搜尋歌曲、音樂人與歌單...", color = Color.Gray)
                 },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { viewModel.search() }),
+                keyboardActions = KeyboardActions(onSearch = { onSearch() }),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedTextColor = Color.White,
                     unfocusedTextColor = Color.White,
@@ -95,7 +163,7 @@ fun SearchScreen(
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            Button(onClick = { viewModel.search() }) {
+            Button(onClick = onSearch) {
                 Text("搜尋")
             }
         }
@@ -111,46 +179,84 @@ fun SearchScreen(
             }
 
             uiState.error != null -> {
-                ErrorContent(
-                    message = uiState.error!!,
-                    onRetry = { viewModel.search() },
-                    onDismiss = { viewModel.clearError() },
+                MessageState(
+                    title = "發生錯誤",
+                    message = uiState.error,
+                    isError = true,
+                    primaryAction = MessageAction("重試", onSearch),
+                    secondaryAction = MessageAction("關閉", onClearError),
+                    modifier = Modifier.padding(bottom = bottomInset),
                 )
             }
 
             uiState.isEmpty && uiState.query.isNotBlank() -> {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("找不到「${uiState.query}」的結果", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+                MessageState(
+                    message = "找不到「${uiState.query.trim().ellipsize(MAX_QUERY_DISPLAY_CHARS)}」的結果",
+                    modifier = Modifier.padding(bottom = bottomInset),
+                )
             }
 
             uiState.hasResults -> {
+                val firstResultFocus = remember { FocusRequester() }
+                val firstSection = when {
+                    uiState.artists.isNotEmpty() -> 0
+                    uiState.playlists.isNotEmpty() -> 1
+                    else -> 2
+                }
+                fun Modifier.firstResult(section: Int, index: Int): Modifier =
+                    if (section == firstSection && index == 0) focusRequester(firstResultFocus) else this
+
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .focusRestorer(),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
-                    contentPadding = PaddingValues(horizontal = HPad, vertical = 8.dp),
+                    contentPadding = screenListPadding(bottomInset, top = 8.dp),
                 ) {
                     if (uiState.artists.isNotEmpty()) {
-                        item { SectionHeader("音樂人") }
-                        items(uiState.artists, key = { "artist_${it.id}" }) { artist ->
-                            ArtistListItem(artist = artist, onClick = { onArtistSelected(artist) })
+                        item(key = "h_artists") { SectionHeader("音樂人") }
+                        itemsIndexed(uiState.artists, key = { _, it -> "artist_${it.id}" }) { index, artist ->
+                            ArtistListItem(
+                                artist = artist,
+                                onClick = { onArtistSelected(artist) },
+                                modifier = Modifier.firstResult(0, index),
+                            )
                         }
-                        item { Spacer(modifier = Modifier.height(12.dp)) }
+                        item(key = "s_artists") { Spacer(modifier = Modifier.height(12.dp)) }
                     }
 
                     if (uiState.playlists.isNotEmpty()) {
-                        item { SectionHeader("歌單") }
-                        items(uiState.playlists, key = { "playlist_${it.id}" }) { playlist ->
-                            PlaylistListItem(playlist = playlist, onClick = { onPlaylistSelected(playlist) })
+                        item(key = "h_playlists") { SectionHeader("歌單") }
+                        itemsIndexed(uiState.playlists, key = { _, it -> "playlist_${it.id}" }) { index, playlist ->
+                            PlaylistListItem(
+                                playlist = playlist,
+                                onClick = { onPlaylistSelected(playlist) },
+                                modifier = Modifier.firstResult(1, index),
+                            )
                         }
-                        item { Spacer(modifier = Modifier.height(12.dp)) }
+                        item(key = "s_playlists") { Spacer(modifier = Modifier.height(12.dp)) }
                     }
 
                     if (uiState.songs.isNotEmpty()) {
-                        item { SectionHeader("歌曲") }
-                        items(uiState.songs, key = { "song_${it.id}" }) { song ->
-                            SongListItem(song = song, onClick = { onSongSelected(song, uiState.songs) })
+                        item(key = "h_songs") { SectionHeader("歌曲") }
+                        itemsIndexed(uiState.songs, key = { _, it -> "song_${it.id}" }) { index, song ->
+                            SongListItem(
+                                song = song,
+                                onClick = { onSongSelected(song, uiState.songs) },
+                                modifier = Modifier.firstResult(2, index),
+                            )
                         }
+                    }
+                }
+
+                // Move focus to the first result whenever a new result set arrives - but not when
+                // the same results are shown again after Back (focusRoot restores focus then).
+                val resultsKey = listOf(uiState.artists, uiState.playlists, uiState.songs).hashCode()
+                var focusedResultsKey by rememberSaveable { mutableStateOf<Int?>(null) }
+                LaunchedEffect(resultsKey) {
+                    if (focusedResultsKey != resultsKey) {
+                        focusedResultsKey = resultsKey
+                        firstResultFocus.requestFocusWhenReady()
                     }
                 }
             }
@@ -172,29 +278,47 @@ fun SearchScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            searchHistory.forEach { query ->
+                            searchHistory.take(MAX_HISTORY_CHIPS).forEachIndexed { index, query ->
                                 Surface(
-                                    onClick = { viewModel.selectHistory(query) },
+                                    onClick = { onSelectHistory(query) },
                                     shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(20.dp)),
+                                    modifier = Modifier
+                                        .widthIn(max = 280.dp)
+                                        .then(if (index == 0) Modifier.focusRequester(firstChipFocus) else Modifier),
                                 ) {
-                                    Text(
-                                        text = query,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                                    )
+                                    // Fixed height so CJK and Latin chips line up.
+                                    Box(
+                                        modifier = Modifier
+                                            .height(40.dp)
+                                            .padding(horizontal = 16.dp),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Text(
+                                            text = query,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
                 } else {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("在 StreetVoice 上搜尋音樂", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                    MessageState(
+                        message = "在 StreetVoice 上搜尋音樂",
+                        modifier = Modifier.padding(bottom = bottomInset),
+                    )
                 }
             }
         }
     }
 }
+
+private const val MAX_HISTORY_CHIPS = 10
+private const val MAX_QUERY_DISPLAY_CHARS = 30
+
+private fun String.ellipsize(max: Int): String = if (length > max) take(max - 1) + "…" else this
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -205,22 +329,4 @@ private fun SectionHeader(title: String) {
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(vertical = 8.dp),
     )
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun ErrorContent(message: String, onRetry: () -> Unit, onDismiss: () -> Unit) {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Text("發生錯誤", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.error)
-            Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = onRetry) { Text("重試") }
-                Button(onClick = onDismiss) { Text("關閉") }
-            }
-        }
-    }
 }

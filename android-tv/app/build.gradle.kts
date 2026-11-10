@@ -5,6 +5,17 @@ plugins {
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.roborazzi)
+}
+
+// Robolectric android-all jars, fetched through Gradle so they share its repositories/cache.
+val robolectricAndroidAll: Configuration by configurations.creating {
+    isTransitive = false
+}
+val robolectricDepsDir = layout.buildDirectory.dir("robolectric-deps")
+val copyRobolectricAndroidAll by tasks.registering(Sync::class) {
+    from(robolectricAndroidAll)
+    into(robolectricDepsDir)
 }
 
 android {
@@ -15,8 +26,9 @@ android {
         applicationId = "com.example.streetvoicetv"
         minSdk = 28
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        // CI (tag push v1.2.3) から VERSION_NAME / VERSION_CODE を受け取る。ローカルは既定値。
+        versionName = System.getenv("VERSION_NAME") ?: "0.1.0"
+        versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 1
 
         buildConfigField("String", "STREETVOICE_BASE_URL", "\"https://streetvoice.com\"")
     }
@@ -67,6 +79,25 @@ android {
         abortOnError = false
         checkReleaseBuilds = false
     }
+
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            all {
+                it.maxHeapSize = "2g"
+                // Run Robolectric offline: the android-all jar is resolved by Gradle
+                // (robolectricAndroidAll configuration below) instead of being downloaded
+                // by Robolectric at test time.
+                it.dependsOn(copyRobolectricAndroidAll)
+                it.systemProperty("robolectric.offline", "true")
+                it.systemProperty("robolectric.dependency.dir", robolectricDepsDir.get().asFile.absolutePath)
+            }
+        }
+    }
+}
+
+roborazzi {
+    outputDir.set(file("src/test/screenshots"))
 }
 
 dependencies {
@@ -115,4 +146,16 @@ dependencies {
 
     // Coil (image loading)
     implementation(libs.coil.compose)
+
+    // Testing (JVM unit + Roborazzi screenshot tests)
+    testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
+    robolectricAndroidAll(libs.robolectric.android.all)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(composeBom)
+    testImplementation(libs.compose.ui.test.junit4)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.roborazzi.junit.rule)
+    debugImplementation(libs.compose.ui.test.manifest)
 }

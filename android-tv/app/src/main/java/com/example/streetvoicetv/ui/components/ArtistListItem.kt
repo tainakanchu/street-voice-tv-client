@@ -1,12 +1,9 @@
 package com.example.streetvoicetv.ui.components
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
@@ -39,26 +36,13 @@ fun ArtistListItem(
             )
         },
         supportingContent = {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (artist.songsCount > 0) {
-                    Text(
-                        text = "${artist.songsCount} songs",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                if (artist.followersCount > 0) {
-                    Text(
-                        text = "${artist.followersCount} followers",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+            val counts = buildList {
+                if (artist.songsCount > 0) add("${artist.songsCount} 首歌曲")
+                if (artist.followersCount > 0) add("粉絲 ${artist.followersCount}")
             }
+            SupportingRow(null, *counts.toTypedArray())
         },
+        scale = listItemScale(),
         leadingContent = {
             AsyncImage(
                 model = artist.profileImageUrl,
