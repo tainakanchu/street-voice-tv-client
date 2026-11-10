@@ -6,6 +6,9 @@ import com.example.streetvoicetv.data.SearchHistoryManager
 import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.testutil.FakeStreetVoiceRepository
 import com.example.streetvoicetv.testutil.MainDispatcherRule
+import com.example.streetvoicetv.testutil.lastPage
+import com.example.streetvoicetv.domain.model.Page
+import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -40,9 +43,9 @@ class SearchViewModelTest {
 
     @Test
     fun `search trims query, records history and shows partial results`() {
-        repository.searchSongsResult = Result.success(listOf(song))
+        repository.searchSongs = { _, _ -> lastPage(listOf(song)) }
         repository.searchArtistsResult = Result.failure(RuntimeException("artists down"))
-        repository.searchPlaylistsResult = Result.success(emptyList())
+        repository.searchPlaylistsResult = lastPage(emptyList())
 
         vm.onQueryChange("  周杰倫 ")
         vm.search()
@@ -58,7 +61,7 @@ class SearchViewModelTest {
 
     @Test
     fun `all searches failing surfaces an error`() {
-        repository.searchSongsResult = Result.failure(RuntimeException("offline"))
+        repository.searchSongs = { _, _ -> Result.failure(RuntimeException("offline")) }
         repository.searchArtistsResult = Result.failure(RuntimeException("offline"))
         repository.searchPlaylistsResult = Result.failure(RuntimeException("offline"))
 
@@ -68,5 +71,34 @@ class SearchViewModelTest {
 
         vm.clearError()
         assertNull(vm.uiState.value.error)
+    }
+
+    @Test
+    fun `songs load more, and a new search drops the pending page of the old one`() {
+        val stale = CompletableDeferred<Result<Page<Song>>>()
+        val first = List(20) { Song(it, "歌 $it", "a", "a", null, 1.0, 0) }
+        repository.searchSongs = { offset, _ ->
+            if (offset == 0) Result.success(Page(first, 100, 20)) else stale.await()
+        }
+        repository.searchArtistsResult = lastPage(emptyList())
+        repository.searchPlaylistsResult = lastPage(emptyList())
+
+        vm.onQueryChange("lofi")
+        vm.search()
+        assertEquals(1, vm.uiState.value.resultsGeneration)
+        assertTrue(vm.uiState.value.songsLoadMore.canLoadMore)
+
+        vm.loadMoreSongs()
+        assertTrue("searchSongs(lofi, offset=20)" in repository.calls)
+        assertTrue(vm.uiState.value.songsLoadMore.isLoadingMore)
+
+        vm.onQueryChange("jazz")
+        vm.search()
+        stale.complete(Result.success(Page(listOf(Song(999, "stale", "a", "a", null, 1.0, 0)), 100, null)))
+
+        val state = vm.uiState.value
+        assertEquals(first, state.songs)
+        assertFalse(state.songsLoadMore.isLoadingMore)
+        assertEquals(2, state.resultsGeneration)
     }
 }

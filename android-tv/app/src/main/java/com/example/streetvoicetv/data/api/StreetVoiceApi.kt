@@ -18,6 +18,7 @@ import com.example.streetvoicetv.data.model.UserSongsResponse
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -34,17 +35,17 @@ class StreetVoiceApi @Inject constructor(
     // --- Search ---
 
     suspend fun searchSongs(query: String, limit: Int, offset: Int): SearchResponse {
-        val url = "${config.baseUrl}/api/v4/search/?q=$query&type=song&limit=$limit&offset=$offset"
+        val url = searchUrl(query, "song", limit, offset)
         return get(url) { json.decodeFromString<SearchResponse>(it) }
     }
 
     suspend fun searchUsers(query: String, limit: Int, offset: Int): UserSearchResponse {
-        val url = "${config.baseUrl}/api/v4/search/?q=$query&type=user&limit=$limit&offset=$offset"
+        val url = searchUrl(query, "user", limit, offset)
         return get(url) { json.decodeFromString<UserSearchResponse>(it) }
     }
 
     suspend fun searchPlaylists(query: String, limit: Int, offset: Int): SectionPlaylistsResponse {
-        val url = "${config.baseUrl}/api/v4/search/?q=$query&type=playlist&limit=$limit&offset=$offset"
+        val url = searchUrl(query, "playlist", limit, offset)
         return get(url) { json.decodeFromString<SectionPlaylistsResponse>(it) }
     }
 
@@ -78,22 +79,22 @@ class StreetVoiceApi @Inject constructor(
     }
 
     suspend fun getUserSongs(username: String, limit: Int, offset: Int): UserSongsResponse {
-        val url = "${config.baseUrl}/api/v4/user/$username/songs/?limit=$limit&offset=$offset"
+        val url = pagedUrl("/api/v4/user/$username/songs/", limit, offset)
         return get(url) { json.decodeFromString<UserSongsResponse>(it) }
     }
 
     suspend fun getUserAlbums(username: String, limit: Int, offset: Int): AlbumListResponse {
-        val url = "${config.baseUrl}/api/v4/user/$username/albums/?limit=$limit&offset=$offset"
+        val url = pagedUrl("/api/v4/user/$username/albums/", limit, offset)
         return get(url) { json.decodeFromString<AlbumListResponse>(it) }
     }
 
     suspend fun getUserPlaylists(username: String, limit: Int = 20, offset: Int = 0): SectionPlaylistsResponse {
-        val url = "${config.baseUrl}/api/v4/user/$username/playlists/?limit=$limit&offset=$offset"
+        val url = pagedUrl("/api/v4/user/$username/playlists/", limit, offset)
         return get(url) { json.decodeFromString<SectionPlaylistsResponse>(it) }
     }
 
-    suspend fun getUserLikedSongs(username: String, limit: Int = 50, offset: Int = 0): LikedSongsResponse {
-        val url = "${config.baseUrl}/api/v4/user/$username/likes/?limit=$limit&offset=$offset"
+    suspend fun getUserLikedSongs(username: String, limit: Int, offset: Int): LikedSongsResponse {
+        val url = pagedUrl("/api/v4/user/$username/likes/", limit, offset)
         return get(url) { json.decodeFromString<LikedSongsResponse>(it) }
     }
 
@@ -105,7 +106,7 @@ class StreetVoiceApi @Inject constructor(
     }
 
     suspend fun getAlbumSongs(albumId: Int, limit: Int, offset: Int): AlbumSongsResponse {
-        val url = "${config.baseUrl}/api/v4/album/$albumId/songs/?limit=$limit&offset=$offset"
+        val url = pagedUrl("/api/v4/album/$albumId/songs/", limit, offset)
         return get(url) { json.decodeFromString<AlbumSongsResponse>(it) }
     }
 
@@ -176,12 +177,33 @@ class StreetVoiceApi @Inject constructor(
         return get(url) { json.decodeFromString<PlaylistDetailResponse>(it) }
     }
 
-    suspend fun getPlaylistSongs(playlistId: Int, limit: Int = 50, offset: Int = 0): PlaylistSongsResponse {
-        val url = "${config.baseUrl}/api/v4/playlist/$playlistId/songs/?limit=$limit&offset=$offset"
+    suspend fun getPlaylistSongs(playlistId: Int, limit: Int, offset: Int): PlaylistSongsResponse {
+        val url = pagedUrl("/api/v4/playlist/$playlistId/songs/", limit, offset)
         return get(url) { json.decodeFromString<PlaylistSongsResponse>(it) }
     }
 
     // --- Internal ---
+
+    /**
+     * Search URL. The query is percent-encoded (a raw `&`, `#` or `+` in the query would
+     * otherwise break the request).
+     */
+    private fun searchUrl(query: String, type: String, limit: Int, offset: Int): String =
+        "${config.baseUrl}/api/v4/search/".toHttpUrl().newBuilder()
+            .addQueryParameter("q", query)
+            .addQueryParameter("type", type)
+            .addQueryParameter("limit", limit.toString())
+            .addQueryParameter("offset", offset.toString())
+            .build()
+            .toString()
+
+    /** Offset-paginated list URL: [path] starts and ends with `/`. */
+    private fun pagedUrl(path: String, limit: Int, offset: Int): String =
+        "${config.baseUrl}$path".toHttpUrl().newBuilder()
+            .addQueryParameter("limit", limit.toString())
+            .addQueryParameter("offset", offset.toString())
+            .build()
+            .toString()
 
     private suspend fun <T> get(url: String, parser: (String) -> T): T {
         val request = Request.Builder()

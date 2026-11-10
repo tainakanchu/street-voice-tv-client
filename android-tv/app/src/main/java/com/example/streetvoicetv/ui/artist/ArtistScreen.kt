@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
@@ -40,7 +41,12 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import com.example.streetvoicetv.domain.model.Album
 import com.example.streetvoicetv.domain.model.Song
+import com.example.streetvoicetv.ui.common.PlayAllMode
 import com.example.streetvoicetv.ui.components.AlbumListItem
+import com.example.streetvoicetv.ui.components.LoadMoreEffect
+import com.example.streetvoicetv.ui.components.PlayAllButtons
+import com.example.streetvoicetv.ui.components.holdFocusWhileLoadingMore
+import com.example.streetvoicetv.ui.components.loadMoreFooter
 import com.example.streetvoicetv.ui.components.MessageAction
 import com.example.streetvoicetv.ui.components.MessageState
 import com.example.streetvoicetv.ui.components.SongListItem
@@ -54,6 +60,7 @@ import com.example.streetvoicetv.ui.theme.screenListPadding
 @Composable
 fun ArtistScreen(
     onSongSelected: (Song, List<Song>) -> Unit,
+    onPlayAll: (List<Song>, PlayAllMode) -> Unit,
     onAlbumSelected: (Album) -> Unit,
     onBack: () -> Unit,
     viewModel: ArtistViewModel = hiltViewModel(),
@@ -67,6 +74,11 @@ fun ArtistScreen(
         onRetry = { viewModel.retry() },
         onBack = onBack,
         onSelectTab = { viewModel.selectTab(it) },
+        onPlayAll = { mode -> viewModel.playAll(mode, onPlayAll) },
+        onLoadMoreSongs = { viewModel.loadMoreSongs() },
+        onRetryLoadMoreSongs = { viewModel.retryLoadMoreSongs() },
+        onLoadMoreAlbums = { viewModel.loadMoreAlbums() },
+        onRetryLoadMoreAlbums = { viewModel.retryLoadMoreAlbums() },
     )
 }
 
@@ -80,6 +92,11 @@ fun ArtistContent(
     onRetry: () -> Unit,
     onBack: () -> Unit,
     onSelectTab: (ArtistTab) -> Unit,
+    onPlayAll: (PlayAllMode) -> Unit = {},
+    onLoadMoreSongs: () -> Unit = {},
+    onRetryLoadMoreSongs: () -> Unit = {},
+    onLoadMoreAlbums: () -> Unit = {},
+    onRetryLoadMoreAlbums: () -> Unit = {},
 ) {
     val bottomInset = LocalBottomOverlayInset.current
     when {
@@ -111,7 +128,14 @@ fun ArtistContent(
                 ArtistTab.Albums -> uiState.albums.isEmpty()
             }
 
+            val listState = rememberLazyListState()
+            when (uiState.selectedTab) {
+                ArtistTab.Songs -> LoadMoreEffect(listState, uiState.songsLoadMore, onLoadMoreSongs)
+                ArtistTab.Albums -> LoadMoreEffect(listState, uiState.albumsLoadMore, onLoadMoreAlbums)
+            }
+
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .fillMaxSize()
                     .focusRoot(firstItemFocus),
@@ -194,8 +218,8 @@ fun ArtistContent(
                             ) {
                                 Text(
                                     text = when (tab) {
-                                        ArtistTab.Songs -> "歌曲 (${uiState.songs.size})"
-                                        ArtistTab.Albums -> "專輯 (${uiState.albums.size})"
+                                        ArtistTab.Songs -> "歌曲 (${uiState.songsLoadMore.total ?: uiState.songs.size})"
+                                        ArtistTab.Albums -> "專輯 (${uiState.albumsLoadMore.total ?: uiState.albums.size})"
                                     },
                                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                                 )
@@ -209,13 +233,24 @@ fun ArtistContent(
                         if (uiState.songs.isEmpty()) {
                             item(key = "empty_songs") { EmptyTab("沒有歌曲") }
                         } else {
+                            item(key = "play_all") {
+                                PlayAllButtons(
+                                    pending = uiState.playAllPending,
+                                    onPlayAll = onPlayAll,
+                                    modifier = Modifier.padding(bottom = 8.dp),
+                                )
+                            }
+                            // Playing a song queues the songs loaded so far (not all of the artist's songs).
                             itemsIndexed(uiState.songs, key = { _, it -> "song_${it.id}" }) { index, song ->
                                 SongListItem(
                                     song = song,
                                     onClick = { onSongSelected(song, uiState.songs) },
-                                    modifier = Modifier.initialFocus(firstItemFocus, enabled = index == 0),
+                                    modifier = Modifier
+                                        .initialFocus(firstItemFocus, enabled = index == 0)
+                                        .holdFocusWhileLoadingMore(index == uiState.songs.lastIndex, uiState.songsLoadMore),
                                 )
                             }
+                            loadMoreFooter(uiState.songsLoadMore, onRetryLoadMoreSongs)
                         }
                     }
 
@@ -227,9 +262,12 @@ fun ArtistContent(
                                 AlbumListItem(
                                     album = album,
                                     onClick = { onAlbumSelected(album) },
-                                    modifier = Modifier.initialFocus(firstItemFocus, enabled = index == 0),
+                                    modifier = Modifier
+                                        .initialFocus(firstItemFocus, enabled = index == 0)
+                                        .holdFocusWhileLoadingMore(index == uiState.albums.lastIndex, uiState.albumsLoadMore),
                                 )
                             }
+                            loadMoreFooter(uiState.albumsLoadMore, onRetryLoadMoreAlbums)
                         }
                     }
                 }

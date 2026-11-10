@@ -141,7 +141,9 @@ class DetailDpadTest {
         setArtist(ArtistUiState(artist = artist, songs = FakeData.songs, albums = FakeData.albums))
         compose.assertFocusedText(FakeData.songs[0].name)
 
-        // Up from the first song reaches the (selected) Songs tab.
+        // Up from the first song reaches the play-all buttons, then the (selected) Songs tab.
+        compose.dpad(Dpad.Up)
+        compose.assertFocused(hasText("播放全部"))
         compose.dpad(Dpad.Up)
         compose.assertFocused(songsTab)
 
@@ -164,6 +166,8 @@ class DetailDpadTest {
         compose.dpad(Dpad.Left)
         compose.assertFocused(songsTab)
         assertEquals(ArtistTab.Songs, artistState.selectedTab)
+        compose.dpad(Dpad.Down)
+        compose.assertFocused(hasText("播放全部"))
         compose.dpad(Dpad.Down)
         compose.assertFocusedText(FakeData.songs[0].name)
     }

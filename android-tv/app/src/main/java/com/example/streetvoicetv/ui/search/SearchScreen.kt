@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -53,6 +54,9 @@ import com.example.streetvoicetv.domain.model.Artist
 import com.example.streetvoicetv.domain.model.Playlist
 import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.ui.components.ArtistListItem
+import com.example.streetvoicetv.ui.components.LoadMoreEffect
+import com.example.streetvoicetv.ui.components.holdFocusWhileLoadingMore
+import com.example.streetvoicetv.ui.components.loadMoreFooter
 import com.example.streetvoicetv.ui.components.PlaylistListItem
 import com.example.streetvoicetv.ui.components.MessageAction
 import com.example.streetvoicetv.ui.components.MessageState
@@ -88,6 +92,8 @@ fun SearchScreen(
         onSongSelected = onSongSelected,
         onArtistSelected = onArtistSelected,
         onPlaylistSelected = onPlaylistSelected,
+        onLoadMoreSongs = { viewModel.loadMoreSongs() },
+        onRetryLoadMoreSongs = { viewModel.retryLoadMoreSongs() },
     )
 }
 
@@ -104,6 +110,8 @@ fun SearchContent(
     onSongSelected: (Song, List<Song>) -> Unit,
     onArtistSelected: (Artist) -> Unit,
     onPlaylistSelected: (Playlist) -> Unit,
+    onLoadMoreSongs: () -> Unit = {},
+    onRetryLoadMoreSongs: () -> Unit = {},
 ) {
     val bottomInset = LocalBottomOverlayInset.current
     // The text field gets the initial focus unless results / an error claim it.
@@ -206,7 +214,11 @@ fun SearchContent(
                 fun Modifier.firstResult(section: Int, index: Int): Modifier =
                     if (section == firstSection && index == 0) focusRequester(firstResultFocus) else this
 
+                val listState = rememberLazyListState()
+                LoadMoreEffect(listState, uiState.songsLoadMore, onLoadMoreSongs)
+
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier
                         .fillMaxSize()
                         .focusRestorer(),
@@ -239,19 +251,24 @@ fun SearchContent(
 
                     if (uiState.songs.isNotEmpty()) {
                         item(key = "h_songs") { SectionHeader("歌曲") }
+                        // Playing a song queues the songs loaded so far.
                         itemsIndexed(uiState.songs, key = { _, it -> "song_${it.id}" }) { index, song ->
                             SongListItem(
                                 song = song,
                                 onClick = { onSongSelected(song, uiState.songs) },
-                                modifier = Modifier.firstResult(2, index),
+                                modifier = Modifier
+                                    .firstResult(2, index)
+                                    .holdFocusWhileLoadingMore(index == uiState.songs.lastIndex, uiState.songsLoadMore),
                             )
                         }
+                        loadMoreFooter(uiState.songsLoadMore, onRetryLoadMoreSongs)
                     }
                 }
 
                 // Move focus to the first result whenever a new result set arrives - but not when
-                // the same results are shown again after Back (focusRoot restores focus then).
-                val resultsKey = listOf(uiState.artists, uiState.playlists, uiState.songs).hashCode()
+                // the same results are shown again after Back (focusRoot restores focus then), nor
+                // when more songs are appended to the current results.
+                val resultsKey = uiState.resultsGeneration
                 var focusedResultsKey by rememberSaveable { mutableStateOf<Int?>(null) }
                 LaunchedEffect(resultsKey) {
                     if (focusedResultsKey != resultsKey) {

@@ -14,10 +14,13 @@ import com.example.streetvoicetv.data.model.UserSearchResult
 import com.example.streetvoicetv.data.model.UserSongResult
 import com.example.streetvoicetv.domain.model.Album
 import com.example.streetvoicetv.domain.model.Artist
+import com.example.streetvoicetv.domain.model.Page
 import com.example.streetvoicetv.domain.model.PlayableStream
 import com.example.streetvoicetv.domain.model.Playlist
 import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.domain.repository.StreetVoiceRepository
+import kotlinx.coroutines.CancellationException
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -28,123 +31,153 @@ class StreetVoiceRepositoryImpl @Inject constructor(
 
     // --- Search ---
 
-    override suspend fun searchSongs(query: String, limit: Int, offset: Int): Result<List<Song>> {
-        return runCatching {
-            api.searchSongs(query, limit, offset).results.map { it.toDomain() }
+    override suspend fun searchSongs(query: String, limit: Int, offset: Int): Result<Page<Song>> {
+        return apiCatching {
+            api.searchSongs(query, limit, offset).let { pageOf(it.count, it.offset, it.next, it.results) { r -> r.toDomain() } }
         }
     }
 
-    override suspend fun searchArtists(query: String, limit: Int, offset: Int): Result<List<Artist>> {
-        return runCatching {
-            api.searchUsers(query, limit, offset).results.map { it.toDomain() }
+    override suspend fun searchArtists(query: String, limit: Int, offset: Int): Result<Page<Artist>> {
+        return apiCatching {
+            api.searchUsers(query, limit, offset).let { pageOf(it.count, it.offset, it.next, it.results) { r -> r.toDomain() } }
         }
     }
 
-    override suspend fun searchPlaylists(query: String, limit: Int, offset: Int): Result<List<Playlist>> {
-        return runCatching {
-            api.searchPlaylists(query, limit, offset).results.map { it.toDomain() }
+    override suspend fun searchPlaylists(query: String, limit: Int, offset: Int): Result<Page<Playlist>> {
+        return apiCatching {
+            api.searchPlaylists(query, limit, offset).let { pageOf(it.count, it.offset, it.next, it.results) { r -> r.toDomain() } }
         }
     }
 
     // --- Song ---
 
     override suspend fun getSongDetail(songId: Int): Result<Song> {
-        return runCatching {
+        return apiCatching {
             api.getSongDetail(songId).toDomain()
         }
     }
 
     override suspend fun getStreamUrl(songId: Int): Result<PlayableStream> {
-        return runCatching {
+        return apiCatching {
             PlayableStream(songId = songId, hlsUrl = api.getStreamUrl(songId).file)
         }
     }
 
     override suspend fun likeSong(songId: Int): Result<Unit> {
-        return runCatching { api.likeSong(songId) }
+        return apiCatching { api.likeSong(songId) }
     }
 
     override suspend fun unlikeSong(songId: Int): Result<Unit> {
-        return runCatching { api.unlikeSong(songId) }
+        return apiCatching { api.unlikeSong(songId) }
     }
 
     // --- Artist ---
 
     override suspend fun getArtistDetail(username: String): Result<Artist> {
-        return runCatching {
+        return apiCatching {
             api.getUserDetail(username).toDomain()
         }
     }
 
-    override suspend fun getArtistSongs(username: String, limit: Int, offset: Int): Result<List<Song>> {
-        return runCatching {
-            api.getUserSongs(username, limit, offset).results.map { it.toDomain() }
+    override suspend fun getArtistSongs(username: String, limit: Int, offset: Int): Result<Page<Song>> {
+        return apiCatching {
+            api.getUserSongs(username, limit, offset).let { pageOf(it.count, it.offset, it.next, it.results) { r -> r.toDomain() } }
         }
     }
 
-    override suspend fun getArtistAlbums(username: String, limit: Int, offset: Int): Result<List<Album>> {
-        return runCatching {
-            api.getUserAlbums(username, limit, offset).results.map { it.toDomain() }
+    override suspend fun getArtistAlbums(username: String, limit: Int, offset: Int): Result<Page<Album>> {
+        return apiCatching {
+            api.getUserAlbums(username, limit, offset).let { pageOf(it.count, it.offset, it.next, it.results) { r -> r.toDomain() } }
         }
     }
 
     override suspend fun getArtistPlaylists(username: String, limit: Int, offset: Int): Result<List<Playlist>> {
-        return runCatching {
+        return apiCatching {
             api.getUserPlaylists(username, limit, offset).results.map { it.toDomain() }
         }
     }
 
-    override suspend fun getLikedSongs(username: String, limit: Int, offset: Int): Result<List<Song>> {
-        return runCatching {
-            api.getUserLikedSongs(username, limit, offset).results.map { it.contentObject.toDomain() }
+    override suspend fun getLikedSongs(username: String, limit: Int, offset: Int): Result<Page<Song>> {
+        return apiCatching {
+            api.getUserLikedSongs(username, limit, offset)
+                .let { pageOf(it.count, it.offset, it.next, it.results) { r -> r.contentObject.toDomain() } }
         }
     }
 
     // --- Album ---
 
     override suspend fun getAlbumDetail(albumId: Int): Result<Album> {
-        return runCatching {
+        return apiCatching {
             api.getAlbumDetail(albumId).toDomain()
         }
     }
 
-    override suspend fun getAlbumSongs(albumId: Int, limit: Int, offset: Int): Result<List<Song>> {
-        return runCatching {
-            api.getAlbumSongs(albumId, limit, offset).results.map { it.toDomain() }
+    override suspend fun getAlbumSongs(albumId: Int, limit: Int, offset: Int): Result<Page<Song>> {
+        return apiCatching {
+            api.getAlbumSongs(albumId, limit, offset).let { pageOf(it.count, it.offset, it.next, it.results) { r -> r.toDomain() } }
         }
     }
 
     // --- Home / Discover ---
 
     override suspend fun getRealtimeChart(limit: Int): Result<List<Song>> {
-        return runCatching {
+        return apiCatching {
             api.getRealtimeChart(limit = limit).results.map { it.song.toDomain() }
         }
     }
 
     override suspend fun getEditorChoice(limit: Int): Result<List<Song>> {
-        return runCatching {
+        return apiCatching {
             api.getEditorChoice(limit = limit).results.map { it.contentObject.toDomain() }
         }
     }
 
     override suspend fun getPlaylistDetail(playlistId: Int): Result<Playlist> {
-        return runCatching {
+        return apiCatching {
             api.getPlaylistDetail(playlistId).toDomain()
         }
     }
 
     override suspend fun getRecommendedPlaylists(limit: Int): Result<List<Playlist>> {
-        return runCatching {
+        return apiCatching {
             api.getSectionPlaylists(sectionId = 1, limit = limit).results.map { it.toDomain() }
         }
     }
 
-    override suspend fun getPlaylistSongs(playlistId: Int, limit: Int): Result<List<Song>> {
-        return runCatching {
-            api.getPlaylistSongs(playlistId, limit = limit).results.map { it.song.toDomain() }
+    override suspend fun getPlaylistSongs(playlistId: Int, limit: Int, offset: Int): Result<Page<Song>> {
+        return apiCatching {
+            api.getPlaylistSongs(playlistId, limit, offset)
+                .let { pageOf(it.count, it.offset, it.next, it.results) { r -> r.song.toDomain() } }
         }
     }
+}
+
+/**
+ * Like [runCatching], but lets [CancellationException] propagate so a cancelled caller
+ * (e.g. a superseded load) stops instead of seeing a failed [Result].
+ */
+private inline fun <T> apiCatching(block: () -> T): Result<T> =
+    try {
+        Result.success(block())
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Throwable) {
+        Result.failure(e)
+    }
+
+/**
+ * Maps one page of a `{count, offset, limit, next, previous, results}` response.
+ * The next offset is read from the `next` URL (falling back to offset + page size); a missing
+ * `next` or an empty page ends the list, and a next offset that would not advance is ignored
+ * so a misbehaving server cannot make callers loop on the same page.
+ */
+internal fun <R, T> pageOf(count: Int?, offset: Int, next: String?, results: List<R>, map: (R) -> T): Page<T> =
+    Page(items = results.map(map), total = count, nextOffset = nextOffsetOf(offset, results.size, next))
+
+internal fun nextOffsetOf(offset: Int, pageSize: Int, next: String?): Int? {
+    if (next == null || pageSize == 0) return null
+    val fromUrl = next.toHttpUrlOrNull()?.queryParameter("offset")?.toIntOrNull()
+    return fromUrl?.takeIf { it > offset } ?: (offset + pageSize)
 }
 
 // --- Mappers ---

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
@@ -31,7 +32,12 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import com.example.streetvoicetv.domain.model.Song
+import com.example.streetvoicetv.ui.common.PlayAllMode
+import com.example.streetvoicetv.ui.components.LoadMoreEffect
 import com.example.streetvoicetv.ui.components.MessageAction
+import com.example.streetvoicetv.ui.components.PlayAllButtons
+import com.example.streetvoicetv.ui.components.holdFocusWhileLoadingMore
+import com.example.streetvoicetv.ui.components.loadMoreFooter
 import com.example.streetvoicetv.ui.components.MessageState
 import com.example.streetvoicetv.ui.components.SongListItem
 import com.example.streetvoicetv.ui.components.focusRoot
@@ -45,6 +51,7 @@ import com.example.streetvoicetv.ui.theme.screenListPadding
 @Composable
 fun PlaylistScreen(
     onSongSelected: (Song, List<Song>) -> Unit,
+    onPlayAll: (List<Song>, PlayAllMode) -> Unit,
     onBack: () -> Unit,
     viewModel: PlaylistViewModel = hiltViewModel(),
 ) {
@@ -55,6 +62,9 @@ fun PlaylistScreen(
         onSongSelected = onSongSelected,
         onRetry = { viewModel.retry() },
         onBack = onBack,
+        onPlayAll = { mode -> viewModel.playAll(mode, onPlayAll) },
+        onLoadMore = { viewModel.loadMore() },
+        onRetryLoadMore = { viewModel.retryLoadMore() },
     )
 }
 
@@ -66,6 +76,9 @@ fun PlaylistContent(
     onSongSelected: (Song, List<Song>) -> Unit,
     onRetry: () -> Unit,
     onBack: () -> Unit,
+    onPlayAll: (PlayAllMode) -> Unit = {},
+    onLoadMore: () -> Unit = {},
+    onRetryLoadMore: () -> Unit = {},
 ) {
     val bottomInset = LocalBottomOverlayInset.current
     when {
@@ -89,8 +102,11 @@ fun PlaylistContent(
         else -> {
             val playlist = uiState.playlist
             val firstSongFocus = rememberInitialFocus()
+            val listState = rememberLazyListState()
+            LoadMoreEffect(listState, uiState.loadMore, onLoadMore)
 
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .fillMaxSize()
                     .focusRoot(firstSongFocus),
@@ -151,8 +167,22 @@ fun PlaylistContent(
                                         overflow = TextOverflow.Ellipsis,
                                     )
                                 }
+                                if (uiState.songs.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    PlayAllButtons(pending = uiState.playAllPending, onPlayAll = onPlayAll)
+                                }
                             }
                         }
+                    }
+                }
+
+                if (playlist == null && uiState.songs.isNotEmpty()) {
+                    item(key = "play_all") {
+                        PlayAllButtons(
+                            pending = uiState.playAllPending,
+                            onPlayAll = onPlayAll,
+                            modifier = Modifier.padding(bottom = 12.dp),
+                        )
                     }
                 }
 
@@ -172,13 +202,17 @@ fun PlaylistContent(
                         }
                     }
                 } else {
+                    // Playing a song queues the songs loaded so far (not the whole playlist).
                     itemsIndexed(uiState.songs, key = { _, it -> it.id }) { index, song ->
                         SongListItem(
                             song = song,
                             onClick = { onSongSelected(song, uiState.songs) },
-                            modifier = Modifier.initialFocus(firstSongFocus, enabled = index == 0),
+                            modifier = Modifier
+                                .initialFocus(firstSongFocus, enabled = index == 0)
+                                .holdFocusWhileLoadingMore(index == uiState.songs.lastIndex, uiState.loadMore),
                         )
                     }
+                    loadMoreFooter(uiState.loadMore, onRetryLoadMore)
                 }
             }
         }

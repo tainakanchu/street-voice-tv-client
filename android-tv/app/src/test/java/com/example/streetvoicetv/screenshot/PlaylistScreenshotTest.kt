@@ -12,6 +12,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import com.example.streetvoicetv.ui.common.LoadMoreState
 import com.example.streetvoicetv.ui.playlist.PlaylistContent
 import com.example.streetvoicetv.ui.playlist.PlaylistUiState
 
@@ -80,6 +81,44 @@ class PlaylistScreenshotTest {
         },
     ) {
         Playlist(PlaylistUiState(playlist = FakeData.longPlaylists[0], songs = FakeData.longSongs))
+    }
+
+    /** Paginated list scrolled to the end while the next page loads: small loading row. */
+    @Test
+    fun playlist_load_more_loading() = compose.captureTv(
+        "playlist_load_more_loading",
+        nowPlaying = FakeData.playbackLong,
+        beforeCapture = {
+            onNode(hasScrollToIndexAction()).performScrollToIndex(FakeData.songs.size + 1)
+        },
+    ) {
+        Playlist(
+            PlaylistUiState(
+                playlist = FakeData.playlists[0],
+                songs = FakeData.songs,
+                loadMore = LoadMoreState(isLoadingMore = true, endReached = false),
+            ),
+        )
+    }
+
+    /** A page failed: focusable retry row at the end of the list (focused). */
+    @Test
+    fun playlist_load_more_error_focused() = compose.captureTv(
+        "playlist_load_more_error_focused",
+        nowPlaying = FakeData.playbackLong,
+        beforeCapture = {
+            onNode(hasScrollToIndexAction()).performScrollToIndex(FakeData.songs.size + 1)
+            waitForIdle()
+            focusOnText("載入更多失敗")
+        },
+    ) {
+        Playlist(
+            PlaylistUiState(
+                playlist = FakeData.playlists[0],
+                songs = FakeData.songs,
+                loadMore = LoadMoreState(endReached = false, error = "網路連線失敗，請檢查網路後再試"),
+            ),
+        )
     }
 
     @Composable

@@ -152,6 +152,7 @@ dependencies {
     testImplementation(libs.robolectric)
     robolectricAndroidAll(libs.robolectric.android.all)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.okhttp.mockwebserver)
     testImplementation(composeBom)
     testImplementation(libs.compose.ui.test.junit4)
     testImplementation(libs.roborazzi)
