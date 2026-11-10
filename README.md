@@ -128,6 +128,10 @@ cd android-tv
   On failure, diff images are written to `app/build/outputs/roborazzi/` (uploaded as a CI artifact).
 - UI 有意變更後，執行 `recordRoborazziDebug` 並提交更新後的 PNG。
   After an intentional UI change, re-run `recordRoborazziDebug` and commit the updated PNGs.
+- Compose 編譯器報告（穩定性／可略過性）：`./gradlew assembleRelease -PcomposeReports=true`，
+  輸出到 `app/build/compose_compiler/`。
+  Compose compiler stability / skippability reports: `./gradlew assembleRelease -PcomposeReports=true`
+  (written to `app/build/compose_compiler/{reports,metrics}`).
 
 ### 調查腳本 Research Scripts
 
