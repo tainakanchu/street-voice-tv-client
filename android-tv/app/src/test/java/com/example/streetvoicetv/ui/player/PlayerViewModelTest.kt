@@ -191,4 +191,24 @@ class PlayerViewModelTest {
         assertEquals(1, h.manager.state.value.queueSize)
         assertEquals("detail fetched once", listOf(7), repo.detailCalls)
     }
+
+    @Test
+    fun `sleep timer, queue removal, autoplay and seekTo go to the manager`() {
+        val vm = queueAndOpen(testSongs(4), 0)
+        vm.setSleepTimer(com.example.streetvoicetv.playback.SleepTimerOption.END_OF_SONG)
+        assertEquals(com.example.streetvoicetv.playback.SleepTimerState.EndOfSong, vm.sleepTimer.value)
+        vm.setSleepTimer(com.example.streetvoicetv.playback.SleepTimerOption.OFF)
+        assertEquals(com.example.streetvoicetv.playback.SleepTimerState.Off, vm.sleepTimer.value)
+
+        vm.removeFromQueue(2)
+        assertEquals(listOf(1, 2, 4), vm.upNext.value.items.map { it.song.id })
+
+        val before = h.manager.autoplayEnabled.value
+        vm.toggleAutoplay()
+        assertEquals(!before, h.manager.autoplayEnabled.value)
+        assertEquals(!before, vm.upNext.value.autoplayEnabled)
+
+        vm.seekTo(42_000)
+        assertEquals(42_000L, vm.positionMs.value)
+    }
 }

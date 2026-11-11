@@ -89,6 +89,8 @@ class PlayerDpadTest {
         }
         compose.dpad(Dpad.Center)
         assertEquals(listOf("like"), calls)
+        compose.dpad(Dpad.Right)
+        compose.assertFocusedDescription("睡眠計時")
         // The 佇列 (queue) toggle is the last control.
         compose.dpad(Dpad.Right)
         compose.assertFocusedDescription("佇列")
@@ -129,7 +131,7 @@ class PlayerDpadTest {
         setPlayer(FakeData.playbackLong)
         compose.assertFocusedDescription("播放")
 
-        compose.dpad(Dpad.Right, times = 4)
+        compose.dpad(Dpad.Right, times = 5)
         compose.assertFocusedDescription("佇列")
         compose.dpad(Dpad.Right)
         compose.assertFocusedTag(LYRICS_PANEL_TAG)
@@ -167,7 +169,7 @@ class PlayerDpadTest {
             ),
             isLoggedIn = false,
         )
-        compose.dpad(Dpad.Right, times = 4)
+        compose.dpad(Dpad.Right, times = 5)
         compose.assertFocusedDescription("佇列")
     }
 

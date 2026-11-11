@@ -9,6 +9,8 @@ import com.example.streetvoicetv.domain.repository.StreetVoiceRepository
 import com.example.streetvoicetv.playback.PlaybackManager
 import com.example.streetvoicetv.playback.PlaybackState
 import com.example.streetvoicetv.playback.QueueView
+import com.example.streetvoicetv.playback.SleepTimerOption
+import com.example.streetvoicetv.playback.SleepTimerState
 import com.example.streetvoicetv.ui.common.UserMessages
 import com.example.streetvoicetv.ui.common.userMessageFor
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -66,6 +68,9 @@ class PlayerViewModel @Inject constructor(
 
     /** Live position; collect only where progress is drawn. */
     val positionMs: StateFlow<Long> = playbackManager.positionMs
+
+    /** Sleep timer; a countdown ticks every second, so read it only where it is drawn. */
+    val sleepTimer: StateFlow<SleepTimerState> = playbackManager.sleepTimer
 
     /** Detail already fetched by [loadSongAndPlay], so the song-change collector need not refetch it. */
     private var prefetched: Song? = null
@@ -140,6 +145,16 @@ class PlayerViewModel @Inject constructor(
     fun playQueueItem(queueIndex: Int) = playbackManager.playQueueItem(queueIndex)
 
     fun seekBy(deltaMs: Long) = playbackManager.seekBy(deltaMs)
+
+    /** Seek to an absolute position (a synced lyric line). */
+    fun seekTo(positionMs: Long) = playbackManager.seekTo(positionMs)
+
+    /** Removes a song from the queue panel ([com.example.streetvoicetv.playback.QueueItem.queueIndex]). */
+    fun removeFromQueue(queueIndex: Int) = playbackManager.removeFromQueue(queueIndex)
+
+    fun toggleAutoplay() = playbackManager.toggleAutoplay()
+
+    fun setSleepTimer(option: SleepTimerOption) = playbackManager.setSleepTimer(option)
 
     fun handleMediaKey(keyCode: Int): Boolean = playbackManager.handleMediaKey(keyCode)
 

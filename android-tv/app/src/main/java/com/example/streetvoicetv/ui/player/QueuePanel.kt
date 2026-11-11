@@ -1,12 +1,15 @@
 package com.example.streetvoicetv.ui.player
 
+import android.view.KeyEvent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -15,6 +18,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Repeat
@@ -30,12 +34,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.nativeKeyCode
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -54,6 +65,7 @@ import com.example.streetvoicetv.ui.components.MessageState
 import com.example.streetvoicetv.ui.components.requestFocusWhenReady
 import com.example.streetvoicetv.ui.theme.Dimens
 import com.example.streetvoicetv.ui.theme.LocalBottomOverlayInset
+import kotlinx.coroutines.delay
 
 /** Test tag of the queue panel (right-hand side of the player). */
 const val QUEUE_PANEL_TAG = "player_queue_panel"
@@ -70,6 +82,18 @@ const val NEXT_SONG_HINT_TAG = "player_next_song_hint"
 /** Label of the "正在播放" marker on the current queue row. */
 const val NOW_PLAYING_LABEL = "正在播放"
 
+/** Divider above the songs added by autoplay. */
+const val AUTOPLAY_DIVIDER_LABEL = "接下來自動播放"
+
+/** Test tag of the 自動播放 toggle at the end of the queue. */
+const val AUTOPLAY_TOGGLE_TAG = "player_queue_autoplay_toggle"
+
+/** Test tag of the short "removed" message of the queue panel. */
+const val QUEUE_TOAST_TAG = "player_queue_toast"
+
+/** How long the "已從佇列移除" message stays. */
+private const val TOAST_MS = 2_500L
+
 /**
  * The play queue (播放佇列) in play order: played songs dimmed above, the current song selected
  * with a 「正在播放」 marker, then what comes next. Selecting a row jumps to that song.
@@ -77,6 +101,10 @@ const val NOW_PLAYING_LABEL = "正在播放"
  * When opened, the list starts scrolled so the current song is near the top (one played song
  * above it for context). With [focusOnOpen], focus lands on the next song (or the current one
  * when nothing follows); re-entering the list from the controls returns to the row focus left.
+ *
+ * Songs added by autoplay follow a 「接下來自動播放」 divider; the list ends with the 自動播放
+ * toggle. Long-press (or the MENU key) on a row removes it from the queue ([onRemove]; focus
+ * moves to the neighbouring row first) and a short message confirms it.
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -86,8 +114,25 @@ internal fun QueuePanel(
     modifier: Modifier = Modifier,
     focusOnOpen: Boolean = false,
     onOpenFocusHandled: () -> Unit = {},
+    onRemove: (queueIndex: Int) -> Unit = {},
+    onToggleAutoplay: () -> Unit = {},
 ) {
-    Column(modifier = modifier.testTag(QUEUE_PANEL_TAG)) {
+    var toast by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(toast) {
+        if (toast != null) {
+            delay(TOAST_MS)
+            toast = null
+        }
+    }
+    val focusManager = LocalFocusManager.current
+    val remove: (QueueItem) -> Unit = { item ->
+        // Hand focus to a neighbour before the focused row disappears.
+        if (!focusManager.moveFocus(FocusDirection.Down)) focusManager.moveFocus(FocusDirection.Up)
+        onRemove(item.queueIndex)
+        toast = "已從佇列移除：${item.song.name}"
+    }
+    Box(modifier = modifier) {
+    Column(modifier = Modifier.fillMaxSize().testTag(QUEUE_PANEL_TAG)) {
         QueueHeader(queue)
         if (queue.isEmpty) {
             MessageState(
@@ -123,12 +168,15 @@ internal fun QueuePanel(
             ),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
+            val dividerAt = queue.autoplayDividerPosition
             itemsIndexed(queue.items, key = { _, item -> item.queueIndex }) { position, item ->
+                if (position == dividerAt) AutoplayDivider()
                 QueueRow(
                     item = item,
                     isCurrent = position == queue.currentPosition,
                     isPlayed = queue.isPlayed(position),
                     onClick = { onSelect(item.queueIndex) },
+                    onRemove = { remove(item) },
                     modifier = if (position == target) Modifier.focusRequester(targetFocus) else Modifier,
                 )
             }
@@ -142,6 +190,13 @@ internal fun QueuePanel(
                     )
                 }
             }
+            item(key = "autoplay") {
+                AutoplayToggle(
+                    enabled = queue.autoplayEnabled,
+                    repeatOn = queue.repeatMode != RepeatMode.OFF,
+                    onToggle = onToggleAutoplay,
+                )
+            }
         }
 
         if (focusOnOpen) {
@@ -151,6 +206,83 @@ internal fun QueuePanel(
             }
         }
     }
+    toast?.let { message ->
+        Text(
+            text = message,
+            style = MaterialTheme.typography.labelLarge,
+            color = Color.White,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 16.dp + LocalBottomOverlayInset.current, start = 16.dp, end = 16.dp)
+                .background(Color.Black.copy(alpha = 0.8f), RoundedCornerShape(8.dp))
+                .padding(horizontal = 14.dp, vertical = 6.dp)
+                .testTag(QUEUE_TOAST_TAG),
+        )
+    }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun AutoplayDivider() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(Icons.Default.AutoAwesome, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+        Text(AUTOPLAY_DIVIDER_LABEL, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+        Box(
+            Modifier
+                .weight(1f)
+                .height(1.dp)
+                .background(Color.White.copy(alpha = 0.2f)),
+        )
+    }
+}
+
+/** 「自動播放」 on / off at the end of the queue. */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun AutoplayToggle(enabled: Boolean, repeatOn: Boolean, onToggle: () -> Unit) {
+    val primary = MaterialTheme.colorScheme.primary
+    ListItem(
+        selected = false,
+        onClick = onToggle,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp)
+            .testTag(AUTOPLAY_TOGGLE_TAG),
+        scale = ListItemDefaults.scale(focusedScale = Dimens.ListItemFocusedScale),
+        colors = ListItemDefaults.colors(containerColor = Color.White.copy(alpha = 0.06f)),
+        headlineContent = { Text("自動播放", style = MaterialTheme.typography.titleMedium) },
+        supportingContent = {
+            Text(
+                text = if (repeatOn) "重複播放開啟時不會自動播放" else "佇列播完後繼續播放相似的歌曲",
+                style = MaterialTheme.typography.bodySmall,
+                color = LocalContentColor.current,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
+        leadingContent = {
+            Icon(Icons.Default.AutoAwesome, null, Modifier.size(22.dp), tint = if (enabled) primary else LocalContentColor.current)
+        },
+        trailingContent = {
+            Text(
+                text = if (enabled) "開啟" else "關閉",
+                style = MaterialTheme.typography.labelMedium,
+                color = if (enabled) MaterialTheme.colorScheme.onPrimary else LocalContentColor.current,
+                modifier = Modifier
+                    .background(if (enabled) primary else Color.White.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
+                    .padding(horizontal = 10.dp, vertical = 2.dp),
+            )
+        },
+    )
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -202,6 +334,7 @@ private fun QueueRow(
     isCurrent: Boolean,
     isPlayed: Boolean,
     onClick: () -> Unit,
+    onRemove: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val song = item.song
@@ -210,9 +343,15 @@ private fun QueueRow(
     ListItem(
         selected = isCurrent,
         onClick = onClick,
+        onLongClick = onRemove,
         modifier = modifier
             .fillMaxWidth()
             .testTag(queueRowTag(item.queueIndex))
+            .onPreviewKeyEvent { event ->
+                if (event.key.nativeKeyCode != KeyEvent.KEYCODE_MENU) return@onPreviewKeyEvent false
+                if (event.type == KeyEventType.KeyUp) onRemove()
+                true
+            }
             .onFocusChanged { focused = it.isFocused }
             // Already played: dimmed (fully readable again while focused).
             .alpha(if (isPlayed && !focused) 0.5f else 1f),

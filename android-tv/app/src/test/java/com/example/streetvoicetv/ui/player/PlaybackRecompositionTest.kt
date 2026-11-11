@@ -36,14 +36,21 @@ class PlaybackRecompositionTest {
     fun setUp() = installFakeImageLoader()
 
     @Test
-    fun positionChanges_doNotRecomposeSongInfo() {
+    fun positionChanges_doNotRecomposeSongInfo() = positionChangesDoNotRecomposeSongInfo(FakeData.playbackPlaying)
+
+    /** Synced lyrics (and the sleep timer status) read the position / countdown themselves. */
+    @Test
+    fun positionChanges_withSyncedLyrics_doNotRecomposeSongInfo() =
+        positionChangesDoNotRecomposeSongInfo(com.example.streetvoicetv.screenshot.PlayerFeatureFakes.playbackLrc)
+
+    private fun positionChangesDoNotRecomposeSongInfo(playback: com.example.streetvoicetv.playback.PlaybackState) {
         val position = mutableLongStateOf(0L)
         var songInfoCompositions = 0
         compose.setContent {
             TvChrome {
                 PlayerContent(
                     loadingState = PlayerLoadingState(isLoaded = true),
-                    playbackState = FakeData.playbackPlaying,
+                    playbackState = playback,
                     positionMs = { position.longValue },
                     isLiked = false,
                     isLoggedIn = true,

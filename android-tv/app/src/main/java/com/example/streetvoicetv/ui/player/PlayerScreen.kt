@@ -4,6 +4,11 @@ import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -32,6 +37,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -52,6 +58,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -63,6 +70,7 @@ import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
@@ -97,12 +105,15 @@ import com.example.streetvoicetv.playback.PlaybackManager
 import com.example.streetvoicetv.playback.PlaybackState
 import com.example.streetvoicetv.playback.QueueView
 import com.example.streetvoicetv.playback.RepeatMode
+import com.example.streetvoicetv.playback.SleepTimerOption
+import com.example.streetvoicetv.playback.SleepTimerState
 import com.example.streetvoicetv.playback.formatMs
 import com.example.streetvoicetv.playback.progressOf
 import com.example.streetvoicetv.ui.components.MessageAction
 import com.example.streetvoicetv.ui.components.MessageState
 import com.example.streetvoicetv.ui.components.requestFocusWhenReady
 import com.example.streetvoicetv.ui.theme.Dimens
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** D-pad seek step on the progress bar. */
@@ -125,12 +136,13 @@ const val PLAYBACK_ERROR_TAG = "player_playback_error"
 const val QUEUE_BUTTON_DESCRIPTION = "佇列"
 
 /**
- * Icon-only control buttons: slimmer than tv-material's 58dp minimum width so all seven
- * (6 x 48 + 56 + 6 x 8 = 392dp) fit the left column (408dp at 960dp wide).
+ * Icon-only control buttons: slimmer than tv-material's 58dp minimum width so all eight
+ * (7 x 44 + 56 + 7 x 6 = 406dp) fit the left column (408dp at 960dp wide).
  */
-private val ControlButtonPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
-private val ControlButton = Modifier.width(48.dp)
+private val ControlButtonPadding = PaddingValues(horizontal = 10.dp, vertical = 10.dp)
+private val ControlButton = Modifier.width(44.dp)
 private val PlayButtonWidth = 56.dp
+private val ControlSpacing = 6.dp
 
 /** Decode size (px) of the blurred background art. */
 private const val BACKGROUND_DECODE_PX = 64
@@ -151,6 +163,8 @@ fun PlayerScreen(
     val upNext by viewModel.upNext.collectAsState()
     // Collected here but only read (deferred) inside the progress UI, so a tick recomposes just that.
     val position = viewModel.positionMs.collectAsState()
+    // Same for the sleep timer countdown (read only by the small status line / menu).
+    val sleepTimer = viewModel.sleepTimer.collectAsState()
 
     // Keep the screen on only while playing (paused: let the TV screensaver start).
     KeepScreenOn(enabled = playbackState.isPlaying)
@@ -181,6 +195,11 @@ fun PlayerScreen(
             onSeekBy = { viewModel.seekBy(it) },
             upNext = upNext,
             onPlayQueueItem = { viewModel.playQueueItem(it) },
+            onRemoveQueueItem = { viewModel.removeFromQueue(it) },
+            onToggleAutoplay = { viewModel.toggleAutoplay() },
+            sleepTimer = { sleepTimer.value },
+            onSetSleepTimer = { viewModel.setSleepTimer(it) },
+            onSeekTo = { viewModel.seekTo(it) },
         )
     }
 }
@@ -194,6 +213,14 @@ fun PlayerScreen(
  * The 佇列 button switches the right-hand panel between the lyrics and the play queue
  * ([upNext]); Back while the queue is shown returns to the lyrics (and focus to the 佇列 button
  * if it was in the queue) instead of leaving the player. [initialQueueOpen] is for tests.
+ *
+ * Synced (LRC) lyrics are shown line by line following [positionMs] ([SyncedLyricsPanel]);
+ * OK on a line calls [onSeekTo]. The 睡眠計時 button opens [SleepTimerMenu]; [sleepTimer] is
+ * read lazily (it ticks every second) by the status line under the controls only.
+ *
+ * Ambient mode: after [ambientTimeoutMs] without a key while playing, the controls fade out
+ * and [AmbientOverlay] is shown. The first key only wakes the player (focus stays where it
+ * was); media keys still act (and wake it), volume keys pass through.
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -220,6 +247,14 @@ fun PlayerContent(
     upNext: QueueView = QueueView(),
     onPlayQueueItem: (queueIndex: Int) -> Unit = {},
     initialQueueOpen: Boolean = false,
+    onRemoveQueueItem: (queueIndex: Int) -> Unit = {},
+    onToggleAutoplay: () -> Unit = {},
+    sleepTimer: () -> SleepTimerState = { SleepTimerState.Off },
+    onSetSleepTimer: (SleepTimerOption) -> Unit = {},
+    onSeekTo: (Long) -> Unit = {},
+    ambientTimeoutMs: Long = AMBIENT_TIMEOUT_MS,
+    initialAmbient: Boolean = false,
+    initialSleepMenuOpen: Boolean = false,
 ) {
     when {
         loadingState.isLoading -> {
@@ -248,6 +283,29 @@ fun PlayerContent(
             var focusQueueOnOpen by remember { mutableStateOf(false) }
             var rightPanelHasFocus by remember { mutableStateOf(false) }
             val queueButtonFocus = remember { FocusRequester() }
+            val sleepButtonFocus = remember { FocusRequester() }
+            var sleepMenuOpen by remember { mutableStateOf(initialSleepMenuOpen) }
+            var refocusSleepButton by remember { mutableStateOf(false) }
+            val syncedLyrics = remember(song.lyrics) { LrcParser.parse(song.lyrics) }
+            val sleepActive by remember(sleepTimer) { derivedStateOf { sleepTimer().isActive } }
+
+            // Ambient mode: entered after a while without keys while playing; any key leaves it.
+            var ambient by remember { mutableStateOf(initialAmbient && playbackState.isPlaying) }
+            var keyCount by remember { mutableIntStateOf(0) }
+            var swallowKeyUp by remember { mutableStateOf<Int?>(null) }
+            LaunchedEffect(keyCount, playbackState.isPlaying, ambient, sleepMenuOpen) {
+                if (!playbackState.isPlaying) {
+                    ambient = false
+                } else if (!ambient && !sleepMenuOpen) {
+                    delay(ambientTimeoutMs)
+                    ambient = true
+                }
+            }
+            val controlsAlpha by animateFloatAsState(
+                targetValue = if (ambient) 0f else 1f,
+                animationSpec = tween(if (ambient) 1_200 else 250),
+                label = "controlsAlpha",
+            )
 
             // Back closes the queue (back to the lyrics) instead of leaving the player.
             BackHandler(enabled = queueOpen) {
@@ -255,13 +313,41 @@ fun PlayerContent(
                 queueOpen = false
             }
 
-            Box(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .onPreviewKeyEvent { event ->
+                        val code = event.key.nativeKeyCode
+                        if (event.type == KeyEventType.KeyUp && swallowKeyUp == code) {
+                            swallowKeyUp = null
+                            return@onPreviewKeyEvent true
+                        }
+                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                        if (isAmbientPassThroughKey(code)) {
+                            // Media keys act (and wake); volume keys are not UI input.
+                            if (isMediaKey(code)) {
+                                keyCount++
+                                ambient = false
+                            }
+                            return@onPreviewKeyEvent false
+                        }
+                        keyCount++
+                        if (ambient) {
+                            // The first key only wakes the player.
+                            ambient = false
+                            swallowKeyUp = code
+                            return@onPreviewKeyEvent true
+                        }
+                        false
+                    },
+            ) {
                 PlayerBackground(imageUrl = song.imageUrl)
 
                 // Content (inside the TV safe area)
                 Row(
                     modifier = Modifier
                         .fillMaxSize()
+                        .graphicsLayer { alpha = controlsAlpha }
                         .padding(horizontal = Dimens.SafeHorizontal, vertical = Dimens.SafeVertical),
                     horizontalArrangement = Arrangement.spacedBy(48.dp),
                 ) {
@@ -317,7 +403,14 @@ fun PlayerContent(
                                 focusQueueOnOpen = !queueOpen
                                 queueOpen = !queueOpen
                             },
+                            sleepActive = sleepActive,
+                            sleepButtonFocus = sleepButtonFocus,
+                            onOpenSleepTimer = { sleepMenuOpen = true },
                         )
+                        if (sleepActive) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            SleepTimerStatus(sleepTimer)
+                        }
                         if (playbackState.error != null) {
                             Spacer(modifier = Modifier.height(8.dp))
                             PlaybackErrorBanner(message = playbackState.error, onRetry = onRetryPlayback)
@@ -345,6 +438,16 @@ fun PlayerContent(
                             onSelect = onPlayQueueItem,
                             focusOnOpen = focusQueueOnOpen,
                             onOpenFocusHandled = { focusQueueOnOpen = false },
+                            onRemove = onRemoveQueueItem,
+                            onToggleAutoplay = onToggleAutoplay,
+                            modifier = rightModifier,
+                        )
+                    } else if (syncedLyrics != null) {
+                        SyncedLyricsPanel(
+                            lyrics = syncedLyrics,
+                            synopsis = song.synopsis,
+                            positionMs = positionMs,
+                            onSeekTo = onSeekTo,
                             modifier = rightModifier,
                         )
                     } else {
@@ -355,6 +458,37 @@ fun PlayerContent(
                             scrollState = lyricsScrollState,
                             modifier = rightModifier,
                         )
+                    }
+                }
+
+                AnimatedVisibility(visible = ambient, enter = fadeIn(tween(1_200)), exit = fadeOut(tween(250))) {
+                    AmbientOverlay(
+                        song = song,
+                        nextTitle = upNext.next?.song?.name,
+                        syncedLyrics = syncedLyrics,
+                        positionMs = positionMs,
+                    )
+                }
+
+                if (sleepMenuOpen) {
+                    SleepTimerMenu(
+                        state = sleepTimer(),
+                        onSelect = {
+                            onSetSleepTimer(it)
+                            sleepMenuOpen = false
+                            refocusSleepButton = true
+                        },
+                        onDismiss = {
+                            sleepMenuOpen = false
+                            refocusSleepButton = true
+                        },
+                    )
+                }
+                if (refocusSleepButton) {
+                    // After the menu (and its focus trap) is gone.
+                    LaunchedEffect(Unit) {
+                        sleepButtonFocus.requestFocusWhenReady()
+                        refocusSleepButton = false
                     }
                 }
             }
@@ -666,6 +800,9 @@ private fun PlayerControls(
     queueOpen: Boolean,
     queueButtonFocus: FocusRequester,
     onToggleQueue: () -> Unit,
+    sleepActive: Boolean = false,
+    sleepButtonFocus: FocusRequester = remember { FocusRequester() },
+    onOpenSleepTimer: () -> Unit = {},
 ) {
     val playPauseFocus = remember { FocusRequester() }
     val primary = MaterialTheme.colorScheme.primary
@@ -675,7 +812,7 @@ private fun PlayerControls(
         modifier = Modifier
             .focusRestorer(playPauseFocus)
             .focusGroup(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(ControlSpacing),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Button(onClick = onToggleShuffle, modifier = ControlButton, contentPadding = ControlButtonPadding) {
@@ -730,6 +867,17 @@ private fun PlayerControls(
                     tint = if (isLiked) primary else LocalContentColor.current,
                 )
             }
+        }
+        Button(
+            onClick = onOpenSleepTimer,
+            modifier = ControlButton.focusRequester(sleepButtonFocus),
+            contentPadding = ControlButtonPadding,
+        ) {
+            Icon(
+                Icons.Default.Bedtime,
+                SLEEP_TIMER_BUTTON_DESCRIPTION,
+                tint = if (sleepActive) primary else LocalContentColor.current,
+            )
         }
         // Switches the right-hand panel between the lyrics and the play queue.
         Button(

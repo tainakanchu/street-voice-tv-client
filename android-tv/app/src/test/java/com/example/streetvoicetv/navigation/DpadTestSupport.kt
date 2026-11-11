@@ -83,6 +83,8 @@ enum class Dpad(val keyCode: Int) {
     Right(KeyEvent.KEYCODE_DPAD_RIGHT),
     Center(KeyEvent.KEYCODE_DPAD_CENTER),
     Back(KeyEvent.KEYCODE_BACK),
+    Menu(KeyEvent.KEYCODE_MENU),
+    MediaNext(KeyEvent.KEYCODE_MEDIA_NEXT),
 }
 
 /**
