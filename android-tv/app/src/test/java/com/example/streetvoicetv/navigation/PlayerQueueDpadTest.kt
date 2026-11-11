@@ -12,6 +12,7 @@ import com.example.streetvoicetv.screenshot.SCREENSHOT_SDK
 import com.example.streetvoicetv.screenshot.TV_1080P
 import com.example.streetvoicetv.screenshot.TvChrome
 import com.example.streetvoicetv.screenshot.installFakeImageLoader
+import com.example.streetvoicetv.ui.player.AUTOPLAY_TOGGLE_TAG
 import com.example.streetvoicetv.ui.player.LYRICS_PANEL_TAG
 import com.example.streetvoicetv.ui.player.PlayerContent
 import com.example.streetvoicetv.ui.player.PlayerLoadingState
@@ -73,6 +74,8 @@ class PlayerQueueDpadTest {
                     onToggleLike = { calls += "like" },
                     upNext = queue,
                     onPlayQueueItem = { calls += "queue:$it" },
+                    onRemoveQueueItem = { calls += "remove:$it" },
+                    onToggleAutoplay = { calls += "autoplay" },
                 )
             }
         }
@@ -85,7 +88,8 @@ class PlayerQueueDpadTest {
     /** From the initial focus (play / pause) to the 佇列 button and press it. */
     private fun openQueue() {
         compose.assertFocusedDescription("暫停")
-        compose.dpad(Dpad.Right, times = 4)
+        // 暫停 → 下一首 → 重複播放 → 喜歡 → 睡眠計時 → 佇列
+        compose.dpad(Dpad.Right, times = 5)
         compose.assertFocusedDescription(QUEUE_BUTTON_DESCRIPTION)
         compose.dpad(Dpad.Center)
         assertTrue("queue panel shown", queueShown())
@@ -120,10 +124,10 @@ class PlayerQueueDpadTest {
     fun left_returnsToTheControlFocusCameFrom() {
         setPlayer()
         openQueue()
-        compose.dpad(Dpad.Left, Dpad.Left, Dpad.Left)
+        compose.dpad(Dpad.Left, times = 4)
         compose.assertFocusedDescription("重複播放")
         // Right through the controls reaches the queue again (via the 佇列 button).
-        compose.dpad(Dpad.Right, Dpad.Right, Dpad.Right)
+        compose.dpad(Dpad.Right, times = 4)
         compose.assertFocusInside(QUEUE_LIST_TAG)
         compose.dpad(Dpad.Left)
         compose.assertFocusedDescription(QUEUE_BUTTON_DESCRIPTION)
@@ -164,7 +168,7 @@ class PlayerQueueDpadTest {
     fun back_fromControlsWhileQueueOpen_closesQueue_focusStays() {
         setPlayer()
         openQueue()
-        compose.dpad(Dpad.Left, Dpad.Left)
+        compose.dpad(Dpad.Left, times = 3)
         compose.assertFocusedDescription("喜歡")
         compose.dpad(Dpad.Back)
         assertFalse(queueShown())
@@ -193,15 +197,21 @@ class PlayerQueueDpadTest {
         // 下一首 is disabled at the end (but still focusable, like all tv-material buttons).
         openQueue()
         compose.assertFocusedTag(queueRowTag(9))
+        // Below the last song: the 自動播放 toggle, then the end of the list.
         compose.dpad(Dpad.Down)
-        compose.assertFocusedTag(queueRowTag(9))
+        compose.assertFocusedTag(AUTOPLAY_TOGGLE_TAG)
+        compose.dpad(Dpad.Down)
+        compose.assertFocusedTag(AUTOPLAY_TOGGLE_TAG)
+        compose.dpad(Dpad.Center)
+        assertEquals(listOf("autoplay"), calls)
     }
 
     @Test
     fun longQueue_currentSongNearTop_scrollsWithoutLosingFocus() {
         setPlayer(QueueFakes.long, FakeData.playbackLong)
         compose.assertFocusedDescription("播放")
-        compose.dpad(Dpad.Right, times = 4)
+        // 暫停 → 下一首 → 重複播放 → 喜歡 → 睡眠計時 → 佇列
+        compose.dpad(Dpad.Right, times = 5)
         compose.assertFocusedDescription(QUEUE_BUTTON_DESCRIPTION)
         compose.dpad(Dpad.Center)
 

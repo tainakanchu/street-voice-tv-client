@@ -39,6 +39,7 @@ class FakePlaybackEngine : PlaybackEngine {
     override var currentPosition = 0L
     override var duration = 0L
         private set
+    override var volume = 0.7f
 
     /** (url, startPositionMs) of every load. */
     val loads = mutableListOf<Pair<String, Long>>()
@@ -162,13 +163,60 @@ class FakeStreams {
 class InMemorySettings(
     override var shuffleEnabled: Boolean = false,
     override var repeatMode: RepeatMode = RepeatMode.OFF,
+    // Off by default here so the older queue tests keep "the queue ends" semantics.
+    override var autoplayEnabled: Boolean = false,
 ) : PlaybackSettings
+
+/** In-memory [PlaybackStore]; [sessionSaves] / [recentSaves] record every write. */
+class FakePlaybackStore(
+    var session: RestorableSession? = null,
+    var recent: List<RecentlyPlayedEntry> = emptyList(),
+) : PlaybackStore {
+    val sessionSaves = mutableListOf<RestorableSession>()
+    val recentSaves = mutableListOf<List<RecentlyPlayedEntry>>()
+
+    /** When set, loads wait for it (simulates slow storage). */
+    var loadGate: CompletableDeferred<Unit>? = null
+
+    override suspend fun loadSession(): RestorableSession? {
+        loadGate?.await()
+        return session
+    }
+    override suspend fun saveSession(session: RestorableSession) {
+        sessionSaves += session
+        this.session = session
+    }
+
+    override suspend fun loadRecentlyPlayed(): List<RecentlyPlayedEntry> {
+        loadGate?.await()
+        return recent
+    }
+    override suspend fun saveRecentlyPlayed(entries: List<RecentlyPlayedEntry>) {
+        recentSaves += entries
+        recent = entries
+    }
+}
+
+/** Radio returning [pool] (minus excluded ids); records each request. */
+open class FakeRadio(var pool: List<Song> = emptyList()) : RadioSource {
+    val requests = mutableListOf<Pair<Int, Set<Int>>>()
+    var gate: CompletableDeferred<Unit>? = null
+
+    override suspend fun nextSongs(seed: Song, exclude: Set<Int>, count: Int): List<Song> {
+        requests += seed.id to exclude
+        gate?.await()
+        return pool.filter { it.id !in exclude }.take(count)
+    }
+}
 
 /** A [PlaybackManager] wired to fakes. */
 class ManagerHarness(
     dispatcher: CoroutineDispatcher,
     settings: PlaybackSettings = InMemorySettings(),
     seed: Int = 42,
+    val store: FakePlaybackStore = FakePlaybackStore(),
+    val radio: FakeRadio = FakeRadio(),
+    clock: () -> Long = { 0L },
 ) {
     val engine = FakePlaybackEngine()
     val streams = FakeStreams()
@@ -186,5 +234,9 @@ class ManagerHarness(
         dispatcher = dispatcher,
         random = Random(seed),
         retryDelayMs = 1_000,
+        store = store,
+        radioSource = radio,
+        wallClock = clock,
+        elapsedClock = clock,
     )
 }

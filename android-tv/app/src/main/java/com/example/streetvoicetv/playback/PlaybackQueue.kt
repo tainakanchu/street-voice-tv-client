@@ -8,10 +8,13 @@ import kotlin.random.Random
  *
  * Invariants: [currentIndex] is in [songs].indices (or -1 when empty); when shuffle is on,
  * [shuffleOrder] is a permutation of [songs].indices and `shuffleOrder[shufflePosition] ==
- * currentIndex`. Every queue replacement goes through [replace], which regenerates the order.
+ * currentIndex`. [autoplayFlags] has one entry per song (true = appended by 自動播放).
  *
  * Skipping manually with repeat ONE behaves like repeat ALL (wraps); replaying the same song
  * when it ends is handled by the player side.
+ *
+ * Edits ([insertNext], [insertIntoQueue], [remove], [appendAutoplay]) keep the shuffled order:
+ * indices are remapped, and new songs are placed at the matching position of the play order.
  */
 class PlaybackQueue(private val random: Random = Random.Default) {
 
@@ -32,6 +35,7 @@ class PlaybackQueue(private val random: Random = Random.Default) {
         private set
     private var shuffleOrder: List<Int> = emptyList()
     private var shufflePosition: Int = -1
+    private var autoplayFlags: List<Boolean> = emptyList()
 
     val current: Song? get() = songs.getOrNull(currentIndex)
     val size: Int get() = songs.size
@@ -39,11 +43,27 @@ class PlaybackQueue(private val random: Random = Random.Default) {
     /** Read-only view of the shuffle order (for tests). */
     val order: List<Int> get() = shuffleOrder
 
+    /** Whether the song at [index] was appended by autoplay. */
+    fun isAutoplay(index: Int): Boolean = autoplayFlags.getOrElse(index) { false }
+
     private val wraps: Boolean get() = repeatMode != RepeatMode.OFF
+
+    /** Indices of [songs] in play order (ignoring wrap-around) and the current position in it. */
+    private fun playOrder(): Pair<List<Int>, Int> =
+        if (shuffleEnabled) shuffleOrder to shufflePosition else songs.indices.toList() to currentIndex
+
+    /** Songs after the current one in play order (before any wrap-around). */
+    val upcomingCount: Int
+        get() = when {
+            currentIndex !in songs.indices -> 0
+            shuffleEnabled -> shuffleOrder.size - 1 - shufflePosition
+            else -> songs.size - 1 - currentIndex
+        }
 
     /** Replaces the whole queue and makes [startIndex] current (coerced into range). */
     fun replace(newSongs: List<Song>, startIndex: Int) {
         songs = newSongs
+        autoplayFlags = List(newSongs.size) { false }
         currentIndex = if (newSongs.isEmpty()) -1 else startIndex.coerceIn(newSongs.indices)
         regenerateShuffle()
         revision++
@@ -129,10 +149,175 @@ class PlaybackQueue(private val random: Random = Random.Default) {
         return true
     }
 
-    /** The queue in play order (see [QueueView]). */
-    fun view(): QueueView {
+    // ---------------------------------------------------------------------------------------
+    // Edits
+    // ---------------------------------------------------------------------------------------
+
+    /**
+     * Inserts [song] so it plays right after the current song (in play order, shuffle included).
+     * On an empty queue it becomes the only (current) song. Returns its index in [songs].
+     */
+    fun insertNext(song: Song): Int {
         if (currentIndex !in songs.indices) {
-            return QueueView(shuffleEnabled = shuffleEnabled, repeatMode = repeatMode)
+            replace(listOf(song), 0)
+            return 0
+        }
+        val (_, position) = playOrder()
+        return insert(song, songIndex = currentIndex + 1, orderPosition = position + 1, autoplay = false)
+    }
+
+    /**
+     * Appends [song] to the end of the user's part of the queue: after the last upcoming song
+     * the user picked, before any songs added by autoplay. Returns its index in [songs].
+     */
+    fun insertIntoQueue(song: Song): Int {
+        if (currentIndex !in songs.indices) {
+            replace(listOf(song), 0)
+            return 0
+        }
+        val (order, position) = playOrder()
+        // First upcoming autoplay song in play order (the new song goes before it).
+        val orderPosition = (position + 1 until order.size).firstOrNull { isAutoplay(order[it]) } ?: order.size
+        // In the list itself: before the first autoplay song after the current one (or at the end).
+        val songIndex = if (shuffleEnabled) {
+            (currentIndex + 1 until songs.size).firstOrNull { isAutoplay(it) } ?: songs.size
+        } else {
+            orderPosition
+        }
+        return insert(song, songIndex, orderPosition, autoplay = false)
+    }
+
+    /** Appends songs found by autoplay at the very end of the play order. */
+    fun appendAutoplay(newSongs: List<Song>) {
+        if (newSongs.isEmpty() || currentIndex !in songs.indices) return
+        val first = songs.size
+        songs = songs + newSongs
+        autoplayFlags = autoplayFlags + List(newSongs.size) { true }
+        if (shuffleEnabled) shuffleOrder = shuffleOrder + (first until songs.size)
+        revision++
+    }
+
+    /** Removes the autoplay songs that have not been played yet (after the current one). */
+    fun dropUpcomingAutoplay(): Boolean {
+        val (order, position) = playOrder()
+        if (position < 0) return false
+        val doomed = (position + 1 until order.size).map { order[it] }.filter { isAutoplay(it) }
+        if (doomed.isEmpty()) return false
+        doomed.sortedDescending().forEach { removeNonCurrent(it) }
+        revision++
+        return true
+    }
+
+    /** Result of [remove]. */
+    enum class Removal {
+        /** Nothing removed (index out of range). */
+        NONE,
+
+        /** A song other than the current one was removed. */
+        REMOVED,
+
+        /** The current song was removed and the next one became current. */
+        CURRENT_SKIPPED,
+
+        /** The current song was removed; nothing followed, so the one before it became current. */
+        CURRENT_REMOVED_AT_END,
+
+        /** The only song was removed: the queue is empty now. */
+        EMPTIED,
+    }
+
+    /**
+     * Removes the song at [index] (an index into [songs]). Removing the current song skips to
+     * the next one (in play order); when nothing follows, the previous song becomes current.
+     */
+    fun remove(index: Int): Removal {
+        if (index !in songs.indices) return Removal.NONE
+        if (songs.size == 1) {
+            clear()
+            return Removal.EMPTIED
+        }
+        if (index != currentIndex) {
+            removeNonCurrent(index)
+            revision++
+            return Removal.REMOVED
+        }
+        val result = if (moveToNext() && currentIndex != index) {
+            Removal.CURRENT_SKIPPED
+        } else {
+            // Last in play order (repeat off): step back instead.
+            val (order, position) = playOrder()
+            val previous = order.getOrNull(position - 1) ?: order.first { it != index }
+            jumpTo(previous)
+            Removal.CURRENT_REMOVED_AT_END
+        }
+        removeNonCurrent(index)
+        revision++
+        return result
+    }
+
+    private fun insert(song: Song, songIndex: Int, orderPosition: Int, autoplay: Boolean): Int {
+        songs = songs.toMutableList().also { it.add(songIndex, song) }
+        autoplayFlags = autoplayFlags.toMutableList().also { it.add(songIndex, autoplay) }
+        if (currentIndex >= songIndex) currentIndex++
+        if (shuffleEnabled) {
+            val remapped = shuffleOrder.map { if (it >= songIndex) it + 1 else it }.toMutableList()
+            remapped.add(orderPosition.coerceIn(shufflePosition + 1, remapped.size), songIndex)
+            shuffleOrder = remapped
+        }
+        revision++
+        return songIndex
+    }
+
+    private fun removeNonCurrent(index: Int) {
+        songs = songs.toMutableList().also { it.removeAt(index) }
+        autoplayFlags = autoplayFlags.toMutableList().also { it.removeAt(index) }
+        if (currentIndex > index) currentIndex--
+        if (shuffleEnabled) {
+            val position = shuffleOrder.indexOf(index)
+            if (position in 0 until shufflePosition) shufflePosition--
+            shuffleOrder = shuffleOrder.filter { it != index }.map { if (it > index) it - 1 else it }
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Snapshot (session restore)
+    // ---------------------------------------------------------------------------------------
+
+    /** Everything needed to rebuild this queue later ([restore]); null when empty. */
+    fun snapshot(): QueueSnapshot? {
+        if (currentIndex !in songs.indices) return null
+        return QueueSnapshot(
+            songs = songs,
+            currentIndex = currentIndex,
+            shuffleEnabled = shuffleEnabled,
+            shuffleOrder = shuffleOrder,
+            shufflePosition = shufflePosition,
+            autoplayFlags = autoplayFlags,
+        )
+    }
+
+    /** Rebuilds a queue from [snapshot]; an inconsistent shuffle order is regenerated. */
+    fun restore(snapshot: QueueSnapshot) {
+        songs = snapshot.songs
+        currentIndex = if (songs.isEmpty()) -1 else snapshot.currentIndex.coerceIn(songs.indices)
+        autoplayFlags = snapshot.autoplayFlags.takeIf { it.size == songs.size } ?: List(songs.size) { false }
+        shuffleEnabled = snapshot.shuffleEnabled
+        val order = snapshot.shuffleOrder
+        val valid = shuffleEnabled && order.size == songs.size && order.sorted() == songs.indices.toList() &&
+            order.getOrNull(snapshot.shufflePosition) == currentIndex
+        if (valid) {
+            shuffleOrder = order
+            shufflePosition = snapshot.shufflePosition
+        } else {
+            regenerateShuffle()
+        }
+        revision++
+    }
+
+    /** The queue in play order (see [QueueView]). */
+    fun view(autoplayEnabled: Boolean = false): QueueView {
+        if (currentIndex !in songs.indices) {
+            return QueueView(shuffleEnabled = shuffleEnabled, repeatMode = repeatMode, autoplayEnabled = autoplayEnabled)
         }
         val (order, position) = when {
             shuffleEnabled -> shuffleOrder to shufflePosition
@@ -141,10 +326,11 @@ class PlaybackQueue(private val random: Random = Random.Default) {
             else -> songs.indices.toList() to currentIndex
         }
         return QueueView(
-            items = order.map { QueueItem(it, songs[it]) },
+            items = order.map { QueueItem(it, songs[it], isAutoplay = isAutoplay(it)) },
             currentPosition = position,
             shuffleEnabled = shuffleEnabled,
             repeatMode = repeatMode,
+            autoplayEnabled = autoplayEnabled,
         )
     }
 
@@ -154,7 +340,9 @@ class PlaybackQueue(private val random: Random = Random.Default) {
             shufflePosition = -1
             return
         }
-        val rest = songs.indices.filter { it != currentIndex }.shuffled(random)
+        val others = songs.indices.filter { it != currentIndex }
+        // The user's songs are shuffled; autoplay songs stay at the end, in their order.
+        val rest = others.filter { !isAutoplay(it) }.shuffled(random) + others.filter { isAutoplay(it) }
         shuffleOrder = listOf(currentIndex) + rest
         shufflePosition = 0
     }
@@ -168,3 +356,13 @@ class PlaybackQueue(private val random: Random = Random.Default) {
         return order
     }
 }
+
+/** A [PlaybackQueue]'s state, for persisting / restoring a session. */
+data class QueueSnapshot(
+    val songs: List<Song>,
+    val currentIndex: Int,
+    val shuffleEnabled: Boolean,
+    val shuffleOrder: List<Int>,
+    val shufflePosition: Int,
+    val autoplayFlags: List<Boolean>,
+)
