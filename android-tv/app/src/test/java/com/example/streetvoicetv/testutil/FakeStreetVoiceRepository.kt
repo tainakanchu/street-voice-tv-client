@@ -179,10 +179,28 @@ class FakeStreetVoiceRepository : StreetVoiceRepository {
         return onFollow(username, false)
     }
 
-    override suspend fun getSongDetail(songId: Int): Result<Song> = notStubbed()
+    /** songId -> detail; default "not stubbed". */
+    var onSongDetail: suspend (Int) -> Result<Song> = { notStubbed() }
+
+    /** (songId, like) -> result; default success. */
+    var onLike: suspend (Int, Boolean) -> Result<Unit> = { _, _ -> Result.success(Unit) }
+
+    override suspend fun getSongDetail(songId: Int): Result<Song> {
+        calls += "getSongDetail($songId)"
+        return onSongDetail(songId)
+    }
+
     override suspend fun getStreamUrl(songId: Int): Result<PlayableStream> = notStubbed()
-    override suspend fun likeSong(songId: Int): Result<Unit> = notStubbed()
-    override suspend fun unlikeSong(songId: Int): Result<Unit> = notStubbed()
+
+    override suspend fun likeSong(songId: Int): Result<Unit> {
+        calls += "likeSong($songId)"
+        return onLike(songId, true)
+    }
+
+    override suspend fun unlikeSong(songId: Int): Result<Unit> {
+        calls += "unlikeSong($songId)"
+        return onLike(songId, false)
+    }
 
     private fun <T> notStubbed(): Result<T> = Result.failure(IllegalStateException("not stubbed"))
 }

@@ -125,7 +125,8 @@ fun SongCard(
         imageHeight = 150.dp,
         rank = rank,
         badge = badge,
-        modifier = modifier,
+        // Long-press OK / MENU: the song context menu.
+        modifier = modifier.songMenuTrigger(song),
     )
 }
 

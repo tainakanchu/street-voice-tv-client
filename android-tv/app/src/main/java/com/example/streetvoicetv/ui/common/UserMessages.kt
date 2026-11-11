@@ -22,6 +22,7 @@ object UserMessages {
     const val SESSION_EXPIRED = "登入資訊已失效，請重新登入"
     const val PARTIAL_LOAD_FAILED = "部分內容無法載入"
     const val FOLLOW_FAILED = "無法更新追蹤狀態，請稍後再試"
+    const val LIKE_FAILED = "無法更新喜歡狀態，請稍後再試"
 }
 
 /**

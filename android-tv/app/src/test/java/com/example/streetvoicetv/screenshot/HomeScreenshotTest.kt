@@ -6,6 +6,7 @@ import com.example.streetvoicetv.ui.home.HomeContent
 import com.example.streetvoicetv.ui.home.HomeUiState
 import com.example.streetvoicetv.ui.home.FollowedNewSongs
 import com.example.streetvoicetv.ui.home.RecentSong
+import com.example.streetvoicetv.ui.home.ContinueListening
 import com.example.streetvoicetv.domain.model.ChartCategory
 import com.example.streetvoicetv.domain.model.ChartPeriod
 import com.example.streetvoicetv.ui.common.UserMessages
@@ -158,6 +159,41 @@ class HomeScreenshotTest {
             ),
             isLoggedIn = true,
         )
+    }
+
+    private val continueState = HomeUiState(
+        continueListening = ContinueListening(FakeData.songs[2], positionMs = 95_000, queueSize = 24),
+        recentlyPlayed = FakeData.songs.mapIndexed { i, song ->
+            RecentSong(song.copy(id = song.id + 700), listOf("剛剛", "5 分鐘前", "42 分鐘前", "3 小時前", "2 天前")[i % 5])
+        },
+        followedNew = followedNew,
+        chartSongs = FakeData.songs,
+        playlists = FakeData.playlists,
+    )
+
+    @Test
+    fun home_continue_recent() = compose.captureTv("home_continue_recent") {
+        Home(continueState, isLoggedIn = true)
+    }
+
+    @Test
+    fun home_continue_recent_long_titles() = compose.captureTv("home_continue_recent_long_titles") {
+        Home(
+            HomeUiState(
+                continueListening = ContinueListening(FakeData.longSongs[0], positionMs = 3_000_000, queueSize = 1_234),
+                recentlyPlayed = FakeData.longSongs.map { RecentSong(it.copy(id = it.id + 700), "59 分鐘前") },
+                chartSongs = FakeData.longSongs,
+                playlists = FakeData.longPlaylists,
+            ),
+        )
+    }
+
+    @Test
+    fun home_continue_unfocused() = compose.captureTv(
+        "home_continue_unfocused",
+        beforeCapture = { focusOnText("搜尋歌曲與音樂人") },
+    ) {
+        Home(continueState.copy(followedNew = null))
     }
 
     @androidx.compose.runtime.Composable

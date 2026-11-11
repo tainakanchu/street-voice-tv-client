@@ -35,4 +35,17 @@ class RoutesTest {
         }
         assertEquals("player/5", Routes.player(5))
     }
+
+    @Test
+    fun `search route - plain without a query, encoded query otherwise`() {
+        assertEquals("search", Routes.search())
+        assertEquals("search", Routes.search("  "))
+        for (q in listOf("周杰倫", "a&b=c", "50% off", "a/b?c#d")) {
+            val route = Routes.search(" $q ")
+            assertTrue(route, route.startsWith("search?q="))
+            val arg = route.removePrefix("search?q=")
+            assertFalse(route, arg.contains('&') || arg.contains('#') || arg.contains('/'))
+            assertEquals(q, Uri.decode(arg))
+        }
+    }
 }
