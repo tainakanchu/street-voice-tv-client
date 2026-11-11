@@ -17,6 +17,10 @@ lifecycle = "2.10.0"
 coil = "2.7.0"
 activity-compose = "1.13.0"
 core-ktx = "1.18.0"
+# Google TV home "Watch Next" row (minCompileSdk 34, minAGP 8.1.1)
+tvprovider = "1.1.0"
+# QR code encoding only (no camera / Android deps)
+zxing-core = "3.5.4"
 
 # Testing
 junit = "4.13.2"
@@ -45,6 +49,12 @@ tv-material = { group = "androidx.tv", name = "tv-material", version.ref = "comp
 # Activity & Core
 activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activity-compose" }
 core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "core-ktx" }
+
+# Google TV home integration
+tvprovider = { group = "androidx.tvprovider", name = "tvprovider", version.ref = "tvprovider" }
+
+# QR codes
+zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing-core" }
 
 # Lifecycle
 lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycle" }

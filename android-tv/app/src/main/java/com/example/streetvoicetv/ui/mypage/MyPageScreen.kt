@@ -36,9 +36,13 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.OutlinedButton
+import androidx.tv.material3.OutlinedIconButton
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import androidx.compose.ui.platform.testTag
@@ -80,6 +84,7 @@ fun MyPageScreen(
     onBack: () -> Unit,
     onRelogin: () -> Unit = {},
     onArtistSelected: (Artist) -> Unit = {},
+    onOpenSettings: () -> Unit = {},
     viewModel: MyPageViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -101,6 +106,7 @@ fun MyPageScreen(
             onRelogin()
         },
         onArtistSelected = onArtistSelected,
+        onOpenSettings = onOpenSettings,
     )
 }
 
@@ -119,6 +125,7 @@ fun MyPageContent(
     onLoadMore: () -> Unit = {},
     onRetryLoadMore: () -> Unit = {},
     onArtistSelected: (Artist) -> Unit = {},
+    onOpenSettings: () -> Unit = {},
 ) {
     var showLogoutConfirm by rememberSaveable { mutableStateOf(initialShowLogoutConfirm) }
     // When the dialog is cancelled, focus returns to the 登出 button that opened it
@@ -178,6 +185,7 @@ fun MyPageContent(
                     onLoadMore = onLoadMore,
                     onRetryLoadMore = onRetryLoadMore,
                     onArtistSelected = onArtistSelected,
+                    onOpenSettings = onOpenSettings,
                 )
             }
         }
@@ -211,6 +219,7 @@ private fun MyPageList(
     onLoadMore: () -> Unit,
     onRetryLoadMore: () -> Unit,
     onArtistSelected: (Artist) -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     val profile = uiState.profile ?: return
     val bottomInset = LocalBottomOverlayInset.current
@@ -283,6 +292,9 @@ private fun MyPageList(
                     modifier = Modifier.focusRequester(logoutFocus),
                 ) {
                     Text("登出")
+                }
+                OutlinedIconButton(onClick = onOpenSettings) {
+                    Icon(Icons.Default.Settings, contentDescription = "設定")
                 }
             }
         }

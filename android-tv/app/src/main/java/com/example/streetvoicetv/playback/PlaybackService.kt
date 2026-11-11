@@ -7,7 +7,12 @@ import android.util.Log
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.example.streetvoicetv.MainActivity
+import com.example.streetvoicetv.domain.repository.StreetVoiceRepository
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import javax.inject.Inject
 
 /**
@@ -20,6 +25,9 @@ import javax.inject.Inject
 class PlaybackService : MediaSessionService() {
 
     @Inject lateinit var playbackManager: PlaybackManager
+    @Inject lateinit var repository: StreetVoiceRepository
+
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private var session: MediaSession? = null
 
@@ -33,9 +41,17 @@ class PlaybackService : MediaSessionService() {
         )
         session = MediaSession.Builder(this, playbackManager.sessionPlayer)
             .setSessionActivity(openApp)
+            .setCallback(PlayFromSearchCallback(playFromSearch(), serviceScope))
             .build()
             .also { addSession(it) }
     }
+
+    private fun playFromSearch() = PlayFromSearch(
+        search = { query -> repository.searchSongs(query, limit = SEARCH_LIMIT).getOrThrow().items },
+        fallback = { repository.getRealtimeChart(limit = SEARCH_LIMIT).getOrThrow() },
+        playQueue = playbackManager::playQueue,
+        resumeLastSession = { playbackManager.resumeLastSession(play = true) },
+    )
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
 
@@ -61,12 +77,15 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        serviceScope.cancel()
         session?.release()
         session = null
         super.onDestroy()
     }
 
     companion object {
+        private const val SEARCH_LIMIT = 20
+
         fun start(context: Context) {
             try {
                 context.startService(Intent(context, PlaybackService::class.java))
