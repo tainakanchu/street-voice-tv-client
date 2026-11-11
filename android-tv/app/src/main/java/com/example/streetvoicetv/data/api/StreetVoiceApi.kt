@@ -9,6 +9,8 @@ import com.example.streetvoicetv.data.model.AlbumSongsResponse
 import com.example.streetvoicetv.data.model.ChartResponse
 import com.example.streetvoicetv.data.model.CurrentUserResponse
 import com.example.streetvoicetv.data.model.EditorChoiceResponse
+import com.example.streetvoicetv.data.model.FollowingResponse
+import com.example.streetvoicetv.data.model.GenreListResponse
 import com.example.streetvoicetv.data.model.LikedSongsResponse
 import com.example.streetvoicetv.data.model.PlaylistDetailResponse
 import com.example.streetvoicetv.data.model.PlaylistSongsResponse
@@ -111,6 +113,20 @@ class StreetVoiceApi @Inject constructor(
     suspend fun getUserLikedSongs(username: String, limit: Int = 50, offset: Int = 0): LikedSongsResponse =
         get(userUrl(username, "likes") { page(limit, offset) })
 
+    /** Users [username] follows (public; `results[].to_user`). */
+    suspend fun getUserFollowing(username: String, limit: Int, offset: Int): FollowingResponse =
+        get(userUrl(username, "following") { page(limit, offset) })
+
+    // --- Follow (login required; the server allows POST / DELETE / OPTIONS) ---
+
+    suspend fun followUser(username: String) {
+        execute(postRequest(userUrl(username, "follow"))) { }
+    }
+
+    suspend fun unfollowUser(username: String) {
+        execute(ajaxRequest(userUrl(username, "follow")).delete().build()) { }
+    }
+
     internal fun userUrl(
         username: String,
         sub: String? = null,
@@ -152,6 +168,13 @@ class StreetVoiceApi @Inject constructor(
 
     suspend fun getRealtimeChart(style: String = "all", limit: Int = 20): ChartResponse =
         get(url("api", "v5", "chart", "realtime", style) { addQueryParameter("limit", limit.toString()) })
+
+    /** `/api/v5/chart/{period}/{style}/` (period: realtime / weekly). At most 50 entries. */
+    suspend fun getChart(period: String, style: String, limit: Int, offset: Int): ChartResponse =
+        get(url("api", "v5", "chart", period, style) { page(limit, offset) })
+
+    suspend fun getGenres(): GenreListResponse =
+        get(url("api", "v4", "song", "genre"))
 
     suspend fun getEditorChoice(limit: Int = 10): EditorChoiceResponse =
         get(url("api", "v4", "editor_choice") { addQueryParameter("limit", limit.toString()) })

@@ -30,6 +30,23 @@ class MyPageScreenshotTest {
     }
 
     @Test
+    fun mypage_following() = compose.captureTv("mypage_following") {
+        MyPage(
+            MyPageUiState(
+                profile = FakeData.artists[0],
+                likedSongs = FakeData.songs,
+                playlists = FakeData.playlists,
+                following = FakeData.artists + FakeData.longArtists.mapIndexed { i, a -> a.copy(username = "long_$i") },
+            ),
+        )
+    }
+
+    @Test
+    fun mypage_following_no_playlists() = compose.captureTv("mypage_following_no_playlists") {
+        MyPage(MyPageUiState(profile = FakeData.artists[0], likedSongs = FakeData.songs, following = FakeData.artists))
+    }
+
+    @Test
     fun mypage_long_titles() = compose.captureTv("mypage_long_titles") {
         MyPage(
             MyPageUiState(

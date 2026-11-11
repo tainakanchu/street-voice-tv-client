@@ -22,4 +22,7 @@ data class UserSongResult(
     val length: Double = 0.0,
     val user: SearchSongUser,
     @SerialName("plays_count") val playsCount: Int = 0,
+    val genre: Int? = null,
+    /** e.g. `2026-11-03T18:18:42+0800`. */
+    @SerialName("publish_at") val publishAt: String? = null,
 )
