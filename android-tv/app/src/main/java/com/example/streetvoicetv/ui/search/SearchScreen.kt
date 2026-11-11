@@ -44,7 +44,13 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.ui.platform.testTag
 import androidx.tv.material3.Button
+import androidx.tv.material3.ButtonDefaults
+import androidx.tv.material3.Icon
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
@@ -81,6 +87,7 @@ fun SearchScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val searchHistory by viewModel.history.collectAsStateWithLifecycle()
+    val voiceSearch = rememberVoiceSearch(onResult = viewModel::onVoiceResult)
 
     SearchContent(
         uiState = uiState,
@@ -94,6 +101,7 @@ fun SearchScreen(
         onPlaylistSelected = onPlaylistSelected,
         onLoadMoreSongs = { viewModel.loadMoreSongs() },
         onRetryLoadMoreSongs = { viewModel.retryLoadMoreSongs() },
+        onVoiceSearch = voiceSearch,
     )
 }
 
@@ -112,6 +120,8 @@ fun SearchContent(
     onPlaylistSelected: (Playlist) -> Unit,
     onLoadMoreSongs: () -> Unit = {},
     onRetryLoadMoreSongs: () -> Unit = {},
+    /** Starts voice search (the mic button); null: no speech recognizer, no button. */
+    onVoiceSearch: (() -> Unit)? = null,
 ) {
     val bottomInset = LocalBottomOverlayInset.current
     // The text field gets the initial focus unless results / an error claim it.
@@ -142,6 +152,21 @@ fun SearchContent(
                 .padding(horizontal = HPad),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (onVoiceSearch != null) {
+                Button(
+                    onClick = onVoiceSearch,
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                    modifier = Modifier.testTag(VOICE_SEARCH_BUTTON_TAG),
+                ) {
+                    Icon(
+                        Icons.Default.Mic,
+                        contentDescription = "語音搜尋",
+                        modifier = Modifier.size(ButtonDefaults.IconSize),
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+            }
+
             OutlinedTextField(
                 value = uiState.query,
                 onValueChange = onQueryChange,
@@ -330,6 +355,9 @@ fun SearchContent(
         }
     }
 }
+
+/** Test tag of the mic (voice search) button. */
+const val VOICE_SEARCH_BUTTON_TAG = "search_voice"
 
 private const val MAX_HISTORY_CHIPS = 10
 private const val MAX_QUERY_DISPLAY_CHARS = 30

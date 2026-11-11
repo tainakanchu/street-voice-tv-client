@@ -57,7 +57,7 @@ class LaunchIntentsTest {
     }
 
     @Test
-    fun `search route encodes the query as one argument`() {
+    fun `search route (Routes_search) encodes the query as one argument`() {
         assertEquals("search?q=a%2Fb%20%23x%2050%25", Routes.search("a/b #x 50%"))
         assertEquals("search?q=%E5%91%8A%E4%BA%94%E4%BA%BA", Routes.search("告五人"))
         assertEquals("告五人", Uri.parse("app://x/" + Routes.search("告五人")).getQueryParameter("q"))

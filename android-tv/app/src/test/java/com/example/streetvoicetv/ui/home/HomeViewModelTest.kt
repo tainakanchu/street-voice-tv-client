@@ -13,7 +13,10 @@ import com.example.streetvoicetv.domain.model.Playlist
 import com.example.streetvoicetv.domain.model.parsePublishAt
 import com.example.streetvoicetv.ui.common.UserMessages
 import com.example.streetvoicetv.domain.model.Song
+import com.example.streetvoicetv.playback.RecentlyPlayedEntry
+import com.example.streetvoicetv.testutil.FakePlaybackActions
 import com.example.streetvoicetv.testutil.FakeStreetVoiceRepository
+import com.example.streetvoicetv.testutil.restorableSession
 import com.example.streetvoicetv.testutil.MainDispatcherRule
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -208,5 +211,75 @@ class HomeViewModelTest {
         // Logout hides the row.
         session.clearSession()
         assertNull(vm.uiState.value.followedNew)
+    }
+
+    // --- 繼續播放 / 最近播放 ---
+
+    private fun song(id: Int, durationSeconds: Double = 200.0) = Song(id, "歌 $id", "人", "u", null, durationSeconds, 0)
+
+    @Test
+    fun `continue card - shown for a restorable session, with progress and queue size`() {
+        val playback = FakePlaybackActions(restorableSession(listOf(song(1), song(2), song(3)), currentIndex = 1, positionMs = 50_000))
+        val vm = HomeViewModel(repository, session, followedSongs, playback)
+
+        val card = vm.uiState.value.continueListening!!
+        assertEquals(2, card.song.id)
+        assertEquals(50_000L, card.positionMs)
+        assertEquals(3, card.queueSize)
+        assertEquals(0.25f, card.progress, 0.001f)
+    }
+
+    @Test
+    fun `continue card - absent without a session, appears when the session loads late`() {
+        val playback = FakePlaybackActions()
+        val vm = HomeViewModel(repository, session, followedSongs, playback)
+        assertNull(vm.uiState.value.continueListening)
+
+        playback.restorable.value = restorableSession(listOf(song(7)))
+        assertEquals(7, vm.uiState.value.continueListening!!.song.id)
+        // Unknown duration: no progress rather than a division by zero.
+        playback.restorable.value = restorableSession(listOf(song(8, durationSeconds = 0.0)), positionMs = 10_000)
+        assertEquals(0f, vm.uiState.value.continueListening!!.progress)
+    }
+
+    @Test
+    fun `resume restores the session, returns the song to open and hides the card`() {
+        val playback = FakePlaybackActions(restorableSession(listOf(song(1), song(2)), currentIndex = 1))
+        val vm = HomeViewModel(repository, session, followedSongs, playback)
+
+        assertEquals(2, vm.resumeLastSession())
+        assertEquals(listOf("resumeLastSession(play=true)"), playback.calls)
+        assertNull(vm.uiState.value.continueListening)
+        // Nothing left to resume.
+        assertNull(vm.resumeLastSession())
+        assertEquals(1, playback.calls.size)
+    }
+
+    @Test
+    fun `recently played row - most recent first with played-at age, capped at 20`() {
+        val now = 10 * 86_400_000L
+        val entries = List(25) { RecentlyPlayedEntry(song(100 + it), now - (it + 1) * 5 * 60_000L) }
+        val playback = FakePlaybackActions(recent = entries)
+        val vm = HomeViewModel(repository, session, followedSongs, playback, clock = { now })
+
+        val row = vm.uiState.value.recentlyPlayed
+        assertEquals(20, row.size)
+        assertEquals((100 until 120).toList(), vm.uiState.value.recentlyPlayedQueue.map { it.id })
+        assertEquals("5 分鐘前", row[0].ageLabel)
+        assertEquals("10 分鐘前", row[1].ageLabel)
+    }
+
+    @Test
+    fun `recently played row - empty without history, labels refresh on resume`() {
+        var now = 0L
+        val playback = FakePlaybackActions()
+        val vm = HomeViewModel(repository, session, followedSongs, playback, clock = { now })
+        assertTrue(vm.uiState.value.recentlyPlayed.isEmpty())
+
+        playback.recentlyPlayedEntries.value = listOf(RecentlyPlayedEntry(song(1), playedAtMs = 0L))
+        assertEquals("剛剛", vm.uiState.value.recentlyPlayed.single().ageLabel)
+        now = 3 * 3_600_000L
+        vm.onResume()
+        assertEquals("3 小時前", vm.uiState.value.recentlyPlayed.single().ageLabel)
     }
 }

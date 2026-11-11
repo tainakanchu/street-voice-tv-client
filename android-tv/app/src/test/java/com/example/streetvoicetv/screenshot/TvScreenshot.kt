@@ -97,6 +97,7 @@ fun TvChrome(
     onTogglePlayPause: () -> Unit = {},
     onUpdate: () -> Unit = {},
     onDismissUpdate: () -> Unit = {},
+    contentHost: @Composable (content: @Composable () -> Unit) -> Unit = { it() },
     content: @Composable () -> Unit,
 ) {
     StreetVoiceTvTheme {
@@ -108,6 +109,7 @@ fun TvChrome(
             updateState = updateState,
             onUpdate = onUpdate,
             onDismissUpdate = onDismissUpdate,
+            contentHost = contentHost,
             content = content,
         )
     }

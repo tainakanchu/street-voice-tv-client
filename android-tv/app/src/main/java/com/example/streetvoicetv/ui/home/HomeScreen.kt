@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -38,6 +40,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
@@ -79,10 +82,13 @@ import com.example.streetvoicetv.ui.theme.LocalBottomOverlayInset
 private val ScreenHPadding = Dimens.SafeHorizontal
 
 /**
- * Test tags of the home sections (rows): followed_new, chart, genres, weekly, editor,
- * my_playlists, playlists.
+ * Test tags of the home sections (rows): continue, followed_new, recent, chart, genres, weekly,
+ * editor, my_playlists, playlists.
  */
 fun homeSectionTag(key: String) = "home_section_$key"
+
+/** Test tag of the 「繼續播放」 card. */
+const val CONTINUE_CARD_TAG = "home_continue_card"
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -96,6 +102,8 @@ fun HomeScreen(
     profileImageUrl: String?,
     onPlayAll: (List<Song>, PlayAllMode) -> Unit = { _, _ -> },
     onChartTap: (genreSlug: String, period: ChartPeriod) -> Unit = { _, _ -> },
+    /** Opens the player for the song that is now playing (after 繼續播放). */
+    onOpenPlayer: (songId: Int) -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -119,6 +127,7 @@ fun HomeScreen(
         onPlayAll = onPlayAll,
         onChartTap = onChartTap,
         onRetryFollowed = { viewModel.retryFollowed() },
+        onContinueListening = { viewModel.resumeLastSession()?.let(onOpenPlayer) },
     )
 }
 
@@ -138,13 +147,17 @@ fun HomeContent(
     onPlayAll: (List<Song>, PlayAllMode) -> Unit = { _, _ -> },
     onChartTap: (genreSlug: String, period: ChartPeriod) -> Unit = { _, _ -> },
     onRetryFollowed: () -> Unit = {},
+    /** 繼續播放: resume the saved session. */
+    onContinueListening: () -> Unit = {},
 ) {
     val bottomInset = LocalBottomOverlayInset.current
     val firstItemFocus = rememberInitialFocus()
     val followed = uiState.followedNew
+    val continueListening = uiState.continueListening
     val hasContent = uiState.chartSongs.isNotEmpty() || uiState.editorPicks.isNotEmpty() ||
         uiState.myPlaylists.isNotEmpty() || uiState.playlists.isNotEmpty() ||
-        uiState.weeklySongs.isNotEmpty() || followed?.songs?.isNotEmpty() == true
+        uiState.weeklySongs.isNotEmpty() || followed?.songs?.isNotEmpty() == true ||
+        continueListening != null || uiState.recentlyPlayed.isNotEmpty()
     // Whether the user has pressed any key on Home yet (see the 追蹤 row below).
     var userInteracted by rememberSaveable { mutableStateOf(false) }
 
@@ -232,7 +245,9 @@ fun HomeContent(
                 val followedSongs = followed?.songs.orEmpty()
                 // The first section (top to bottom) gets the initial focus on its first card.
                 val firstSection = when {
+                    continueListening != null -> "continue"
                     followedSongs.isNotEmpty() -> "followed_new"
+                    uiState.recentlyPlayed.isNotEmpty() -> "recent"
                     uiState.chartSongs.isNotEmpty() -> "chart"
                     uiState.weeklySongs.isNotEmpty() -> "weekly"
                     uiState.editorPicks.isNotEmpty() -> "editor"
@@ -242,11 +257,20 @@ fun HomeContent(
                 // 「追蹤音樂人的新歌」 usually arrives after the other rows (it needs the follow
                 // list first). When it does and the user has not touched the remote yet, move
                 // the initial focus up to it, which also scrolls it into view at the top.
+                // 「繼續播放」 (loaded from local storage, usually but not always before the rows
+                // arrive) is the most likely action and takes precedence the same way.
                 val followedFirstCard = remember { FocusRequester() }
+                val continueCard = remember { FocusRequester() }
                 val followedShown = followedSongs.isNotEmpty()
+                val continueShown = continueListening != null
                 LaunchedEffect(followedShown) {
-                    if (followedShown && !userInteracted && firstItemFocus.isDone) {
+                    if (followedShown && !continueShown && !userInteracted && firstItemFocus.isDone) {
                         followedFirstCard.requestFocusWhenReady()
+                    }
+                }
+                LaunchedEffect(continueShown) {
+                    if (continueShown && !userInteracted && firstItemFocus.isDone) {
+                        continueCard.requestFocusWhenReady()
                     }
                 }
                 LazyColumn(
@@ -259,6 +283,17 @@ fun HomeContent(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(top = 4.dp, bottom = Dimens.SafeVertical + bottomInset),
                 ) {
+                    if (continueListening != null) {
+                        item(key = "continue") {
+                            ContinueListeningSection(
+                                continueListening = continueListening,
+                                onClick = onContinueListening,
+                                firstItemFocus = firstItemFocus.takeIf { firstSection == "continue" },
+                                cardFocus = continueCard,
+                            )
+                        }
+                    }
+
                     if (followed != null && (followedSongs.isNotEmpty() || followed.error != null)) {
                         item(key = "followed_new") {
                             if (followedSongs.isNotEmpty()) {
@@ -283,6 +318,19 @@ fun HomeContent(
                                     onRetry = onRetryFollowed,
                                 )
                             }
+                        }
+                    }
+
+                    if (uiState.recentlyPlayed.isNotEmpty()) {
+                        item(key = "recent") {
+                            SongCarouselSection(
+                                title = "最近播放",
+                                tag = homeSectionTag("recent"),
+                                songs = uiState.recentlyPlayedQueue,
+                                badges = uiState.recentlyPlayed.map { it.ageLabel },
+                                onSongSelected = onSongSelected,
+                                firstItemFocus = firstItemFocus.takeIf { firstSection == "recent" },
+                            )
                         }
                     }
 
@@ -364,6 +412,122 @@ fun HomeContent(
         }
     }
 }
+
+/**
+ * 「繼續播放」: one wide card with the saved session's song, how far it got (progress bar and
+ * time) and the queue size. OK resumes it.
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun ContinueListeningSection(
+    continueListening: ContinueListening,
+    onClick: () -> Unit,
+    firstItemFocus: InitialFocus?,
+    cardFocus: FocusRequester,
+) {
+    val song = continueListening.song
+    Column(Modifier.testTag(homeSectionTag("continue"))) {
+        SectionTitle("繼續播放")
+        Box(Modifier.padding(horizontal = ScreenHPadding, vertical = CardRowVerticalPadding)) {
+            Surface(
+                onClick = onClick,
+                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
+                scale = ClickableSurfaceDefaults.scale(focusedScale = 1.03f),
+                modifier = Modifier
+                    .width(ContinueCardWidth)
+                    .testTag(CONTINUE_CARD_TAG)
+                    .focusRequester(cardFocus)
+                    .initialFocus(firstItemFocus),
+            ) {
+                Row(Modifier.height(ContinueCardHeight)) {
+                    Box(contentAlignment = Alignment.Center) {
+                        AsyncImage(
+                            model = song.imageUrl,
+                            contentDescription = song.name,
+                            modifier = Modifier
+                                .size(ContinueCardHeight)
+                                .clip(RoundedCornerShape(topStart = 12.dp, bottomStart = 12.dp)),
+                            contentScale = ContentScale.Crop,
+                        )
+                        Icon(
+                            Icons.Default.PlayArrow,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(Color.Black.copy(alpha = 0.55f), CircleShape)
+                                .padding(6.dp),
+                        )
+                    }
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Column {
+                            Text(
+                                text = song.name,
+                                style = MaterialTheme.typography.titleMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = song.artistName,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = LocalContentColor.current.copy(alpha = 0.75f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ProgressLine(continueListening.progress)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "${Song.formatDuration(continueListening.positionMs / 1000.0)} / ${song.formattedDuration}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = LocalContentColor.current.copy(alpha = 0.75f),
+                                    maxLines = 1,
+                                )
+                                Spacer(Modifier.weight(1f))
+                                Text(
+                                    text = "佇列 ${continueListening.queueSize} 首",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = LocalContentColor.current.copy(alpha = 0.75f),
+                                    maxLines = 1,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** A thin progress bar (track in the content colour, progress in the primary colour). */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun ProgressLine(progress: Float) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(4.dp)
+            .clip(RoundedCornerShape(2.dp))
+            .background(LocalContentColor.current.copy(alpha = 0.25f)),
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth(progress)
+                .fillMaxHeight()
+                .background(MaterialTheme.colorScheme.primary),
+        )
+    }
+}
+
+private val ContinueCardWidth = 480.dp
+private val ContinueCardHeight = 112.dp
 
 /** A small button at the end of a section title (播放全部 / 查看全部). */
 private class SectionAction(val label: String, val icon: ImageVector, val onClick: () -> Unit)

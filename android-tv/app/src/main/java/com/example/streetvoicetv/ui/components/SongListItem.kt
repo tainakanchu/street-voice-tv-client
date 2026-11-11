@@ -33,7 +33,8 @@ fun SongListItem(
     ListItem(
         selected = false,
         onClick = onClick,
-        modifier = modifier.fillMaxWidth(),
+        // Long-press OK / MENU: the song context menu.
+        modifier = modifier.songMenuTrigger(song).fillMaxWidth(),
         headlineContent = {
             Text(
                 text = song.name,

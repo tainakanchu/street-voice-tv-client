@@ -31,6 +31,7 @@ import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.lifecycle.lifecycleScope
 import androidx.compose.ui.unit.dp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -54,7 +55,11 @@ import com.example.streetvoicetv.ui.chart.ChartScreen
 import com.example.streetvoicetv.ui.chart.ChartViewModel
 import com.example.streetvoicetv.ui.common.PlayAllMode
 import com.example.streetvoicetv.ui.artist.ArtistScreen
+import com.example.streetvoicetv.ui.components.AppMessageHost
 import com.example.streetvoicetv.ui.components.BlockFocusEntry
+import com.example.streetvoicetv.ui.components.SongMenuHost
+import com.example.streetvoicetv.ui.components.SongMenuViewModel
+import com.example.streetvoicetv.ui.components.rememberAppMessageState
 import com.example.streetvoicetv.ui.components.NowPlayingBar
 import com.example.streetvoicetv.ui.components.requestFocusWhenReady
 import com.example.streetvoicetv.ui.components.tryRequestFocus
@@ -64,6 +69,7 @@ import com.example.streetvoicetv.ui.mypage.MyPageScreen
 import com.example.streetvoicetv.ui.player.PlayerScreen
 import com.example.streetvoicetv.ui.playlist.PlaylistScreen
 import com.example.streetvoicetv.ui.search.SearchScreen
+import com.example.streetvoicetv.ui.search.SearchViewModel
 import com.example.streetvoicetv.ui.settings.SettingsScreen
 import com.example.streetvoicetv.tv.LaunchAction
 import com.example.streetvoicetv.tv.LaunchActionEffect
@@ -71,7 +77,6 @@ import com.example.streetvoicetv.tv.LaunchIntents
 import com.example.streetvoicetv.tv.SETTINGS_ROUTE
 import com.example.streetvoicetv.tv.StartupAutoResume
 import com.example.streetvoicetv.tv.WatchNextSync
-import com.example.streetvoicetv.tv.search
 import com.example.streetvoicetv.ui.theme.Dimens
 import com.example.streetvoicetv.ui.theme.LocalBottomOverlayInset
 import com.example.streetvoicetv.ui.theme.StreetVoiceTvTheme
@@ -123,6 +128,7 @@ private const val UPDATE_CHECK_DELAY_MS = 5_000L
 
 internal const val PLAYER_ROUTE = "player/{songId}"
 internal const val CHART_ROUTE = "chart?genre={genre}&period={period}"
+internal const val SEARCH_ROUTE = "search?${SearchViewModel.ARG_QUERY}={${SearchViewModel.ARG_QUERY}}"
 
 /** Route builders. String arguments are Uri-encoded ("a/b", "#x", "50%" stay one argument). */
 internal object Routes {
@@ -130,6 +136,13 @@ internal object Routes {
     fun artist(username: String) = "artist/${Uri.encode(username)}"
     fun album(albumId: Int) = "album/$albumId"
     fun playlist(playlistId: Int) = "playlist/$playlistId"
+    /**
+     * The search screen; with a [query] (voice / assistant search: `SearchManager.QUERY`) it
+     * fills the field and runs the search at once.
+     */
+    fun search(query: String? = null) =
+        if (query.isNullOrBlank()) "search" else "search?${SearchViewModel.ARG_QUERY}=${Uri.encode(query.trim())}"
+
     fun chart(genreSlug: String = ChartCategory.ALL_SLUG, period: ChartPeriod = ChartPeriod.Realtime) =
         "chart?genre=${Uri.encode(genreSlug)}&period=${period.pathSegment}"
 
@@ -208,9 +221,16 @@ fun StreetVoiceTvApp(
         action = launchAction,
         playbackManager = playbackManager,
         onOpenPlayer = ::navigateToPlayer,
-        onOpenSearch = { navController.navigate(Routes.search(it)) },
+        // A search already on top is replaced, so the new query is picked up.
+        onOpenSearch = {
+            navController.navigate(Routes.search(it)) { popUpTo(SEARCH_ROUTE) { inclusive = true } }
+        },
         onHandled = onLaunchActionHandled,
     )
+
+    // Song context menu (long-press OK / MENU on any song) and its brief messages.
+    val songMenuViewModel: SongMenuViewModel = hiltViewModel()
+    val appMessages = rememberAppMessageState()
 
     val barState = remember(nowPlaying) {
         PlaybackState(song = nowPlaying.song, isPlaying = nowPlaying.isPlaying, error = nowPlaying.error)
@@ -229,6 +249,16 @@ fun StreetVoiceTvApp(
         onUpdate = { updateChecker.downloadAndInstall() },
         onDismissUpdate = { updateChecker.dismiss() },
         onInstallUpdate = { updateChecker.installApk(activity) },
+        contentHost = { content ->
+            AppMessageHost(appMessages) {
+                SongMenuHost(
+                    viewModel = songMenuViewModel,
+                    onGoToArtist = { navController.navigate(Routes.artist(it)) },
+                    onGoToAlbum = { navController.navigate(Routes.album(it)) },
+                    content = content,
+                )
+            }
+        },
     ) {
         NavHost(
             navController = navController,
@@ -247,13 +277,14 @@ fun StreetVoiceTvApp(
                     onPlaylistSelected = { playlist ->
                         navController.navigate(Routes.playlist(playlist.id))
                     },
-                    onSearchTap = { navController.navigate("search") },
+                    onSearchTap = { navController.navigate(Routes.search()) },
                     onLoginTap = { navController.navigate("login") },
                     onMyPageTap = { navController.navigate("mypage") },
                     isLoggedIn = isLoggedIn,
                     profileImageUrl = profileImageUrl,
                     onPlayAll = ::playAll,
                     onChartTap = { genre, period -> navController.navigate(Routes.chart(genre, period)) },
+                    onOpenPlayer = ::navigateToPlayer,
                 )
             }
 
@@ -283,7 +314,16 @@ fun StreetVoiceTvApp(
                 )
             }
 
-            composable("search") {
+            composable(
+                route = SEARCH_ROUTE,
+                arguments = listOf(
+                    navArgument(SearchViewModel.ARG_QUERY) {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                ),
+            ) {
                 SearchScreen(
                     onSongSelected = { song, allSongs -> playSongInList(allSongs, song) },
                     onArtistSelected = { artist ->
@@ -385,6 +425,8 @@ fun AppScaffold(
     onUpdate: () -> Unit,
     onDismissUpdate: () -> Unit,
     onInstallUpdate: () -> Unit = {},
+    /** Wraps the screen content (app-wide layers such as the song context menu). */
+    contentHost: @Composable (content: @Composable () -> Unit) -> Unit = { it() },
     content: @Composable () -> Unit,
 ) {
     val nowPlayingVisible = showNowPlaying && playbackState.song != null
@@ -428,7 +470,7 @@ fun AppScaffold(
                         .focusRestorer()
                         .focusGroup(),
                 ) {
-                    content()
+                    contentHost(content)
                 }
 
                 if (nowPlayingVisible) {

@@ -295,7 +295,10 @@ fun PlayerContent(
             val shareFocus = remember { FocusRequester() }
             var shareOpen by remember { mutableStateOf(initialShareOpen) }
             var refocusShare by remember { mutableStateOf(false) }
-            val syncedLyrics = remember(song.lyrics) { LrcParser.parse(song.lyrics) }
+            // lyrics_is_lrc = false: plain lyrics, even if a line happens to look like a timestamp.
+            val syncedLyrics = remember(song.lyrics, song.lyricsIsLrc) {
+                if (song.lyricsIsLrc == false) null else LrcParser.parse(song.lyrics)
+            }
             val sleepActive by remember(sleepTimer) { derivedStateOf { sleepTimer().isActive } }
 
             // Ambient mode: entered after a while without keys while playing; any key leaves it.

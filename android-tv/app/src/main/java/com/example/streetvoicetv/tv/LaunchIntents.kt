@@ -3,7 +3,6 @@ package com.example.streetvoicetv.tv
 import android.app.SearchManager
 import android.content.Intent
 import android.net.Uri
-import com.example.streetvoicetv.Routes
 
 /** Something an incoming intent asks the app to do (besides just opening it). */
 sealed interface LaunchAction {
@@ -47,12 +46,6 @@ object LaunchIntents {
         else -> null
     }
 }
-
-/**
- * Route of the search screen pre-filled with [query] (Uri-encoded, so "a/b", "#x", "50%" stay
- * one argument). Navigating to it also works while the search destination has no `q` argument.
- */
-internal fun Routes.search(query: String): String = "search?q=${Uri.encode(query)}"
 
 /** Route of the settings screen. */
 internal const val SETTINGS_ROUTE = "settings"

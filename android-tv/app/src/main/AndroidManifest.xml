@@ -17,6 +17,10 @@
     <!-- Google TV home 「繼續觀看」 (Watch Next) programs live in the system TV provider. -->
     <queries>
         <provider android:authorities="android.media.tv" />
+        <!-- Speech recognizer of the search screen's mic button (package visibility, Android 11+). -->
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
     </queries>
 
     <!-- TV apps don't require touch screen -->

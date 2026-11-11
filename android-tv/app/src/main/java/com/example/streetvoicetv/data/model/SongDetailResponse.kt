@@ -12,7 +12,7 @@ data class SongDetailResponse(
     val genre: Int? = null,
     val synopsis: String? = null,
     val lyrics: String? = null,
-    @SerialName("lyrics_is_lrc") val lyricsIsLrc: Boolean = false,
+    @SerialName("lyrics_is_lrc") val lyricsIsLrc: Boolean? = null,
     @SerialName("plays_count") val playsCount: Int = 0,
     @SerialName("likes_count") val likesCount: Int = 0,
     @SerialName("comments_count") val commentsCount: Int = 0,
