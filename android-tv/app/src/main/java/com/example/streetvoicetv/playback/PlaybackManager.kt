@@ -142,6 +142,9 @@ class PlaybackManager internal constructor(
     private val _recentlyPlayed = MutableStateFlow<List<Song>>(emptyList())
     private var recentLoaded = false
 
+    /** [clearRecentlyPlayed] ran before the saved list was loaded: drop what is loaded. */
+    private var recentClearedBeforeLoad = false
+
     /**
      * The last [MAX_RECENTLY_PLAYED] distinct songs that started playing, most recent first
      * (a song played again moves to the front). Persisted locally (the server has no history
@@ -250,13 +253,14 @@ class PlaybackManager internal constructor(
             if (queue.current == null && _restorable.value == null) _restorable.value = saved
         }
         scope.launch {
-            val saved = try {
+            val loaded = try {
                 store.loadRecentlyPlayed()
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
                 emptyList()
             }
+            val saved = if (recentClearedBeforeLoad) emptyList() else loaded
             // Songs played since start-up stay in front of the loaded history; they were not
             // written yet (that would have replaced the history before it was read).
             val playedMeanwhile = _recentEntries.value.isNotEmpty()
@@ -508,6 +512,14 @@ class PlaybackManager internal constructor(
         val position = if (songMs > 0 && session.positionMs >= songMs - END_SLACK_MS) 0L else session.positionMs
         loadCurrent(startPositionMs = position, newPlay = true, playWhenReady = play)
         return true
+    }
+
+    /** Empties [recentlyPlayed] (設定 → 清除最近播放), also in storage. */
+    fun clearRecentlyPlayed() {
+        if (!recentLoaded) recentClearedBeforeLoad = true
+        _recentEntries.value = emptyList()
+        _recentlyPlayed.value = emptyList()
+        recentWriter.submit(emptyList())
     }
 
     /** Saves the session now (throttling aside); call when the app goes to the background. */

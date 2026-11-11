@@ -254,4 +254,28 @@ class PlaybackManagerSessionTest {
         runCurrent()
         assertEquals(listOf(5, 1, 9), h.manager.recentlyPlayed.value.map { it.id })
     }
+
+    @Test
+    fun `clearRecentlyPlayed empties the list and storage`() {
+        val stored = listOf(RecentlyPlayedEntry(testSong(1), 1), RecentlyPlayedEntry(testSong(9), 2))
+        val h = harness(FakePlaybackStore(recent = stored))
+        runCurrent()
+        assertEquals(listOf(1, 9), h.manager.recentlyPlayed.value.map { it.id })
+        h.manager.clearRecentlyPlayed()
+        runCurrent()
+        assertTrue(h.manager.recentlyPlayed.value.isEmpty())
+        assertTrue(h.manager.recentlyPlayedEntries.value.isEmpty())
+        assertTrue(h.store.recent.isEmpty())
+    }
+
+    @Test
+    fun `clearRecentlyPlayed before the history loaded drops the loaded history`() {
+        val stored = listOf(RecentlyPlayedEntry(testSong(1), 1))
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val h = harness(FakePlaybackStore(recent = stored).apply { loadGate = gate })
+        h.manager.clearRecentlyPlayed()
+        gate.complete(Unit)
+        runCurrent()
+        assertTrue(h.manager.recentlyPlayed.value.isEmpty())
+    }
 }

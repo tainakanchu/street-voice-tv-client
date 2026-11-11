@@ -2,6 +2,8 @@ package com.example.streetvoicetv.ui.player
 
 import android.app.Application
 import androidx.lifecycle.SavedStateHandle
+import com.example.streetvoicetv.ui.settings.SettingsRepository
+import com.example.streetvoicetv.ui.settings.SettingsStorage
 import androidx.media3.common.PlaybackException
 import org.robolectric.RuntimeEnvironment
 import com.example.streetvoicetv.data.auth.SessionManager
@@ -73,7 +75,13 @@ class PlayerViewModelTest {
     private fun runCurrent() = dispatcher.scheduler.runCurrent()
 
     private fun viewModel(songId: Int) =
-        PlayerViewModel(repo, h.manager, session, SavedStateHandle(mapOf("songId" to songId)))
+        PlayerViewModel(
+            repo,
+            h.manager,
+            session,
+            SavedStateHandle(mapOf("songId" to songId)),
+            SettingsRepository(SettingsStorage.InMemory()),
+        )
 
     private fun queueAndOpen(songs: List<Song>, index: Int): PlayerViewModel {
         h.manager.setQueue(songs, index) // as MainActivity.playSongInList does

@@ -48,6 +48,7 @@ import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.CircularProgressIndicator
@@ -165,6 +166,7 @@ fun PlayerScreen(
     val position = viewModel.positionMs.collectAsState()
     // Same for the sleep timer countdown (read only by the small status line / menu).
     val sleepTimer = viewModel.sleepTimer.collectAsState()
+    val ambientTimeoutMs by viewModel.ambientTimeoutMs.collectAsState()
 
     // Keep the screen on only while playing (paused: let the TV screensaver start).
     KeepScreenOn(enabled = playbackState.isPlaying)
@@ -200,6 +202,7 @@ fun PlayerScreen(
             sleepTimer = { sleepTimer.value },
             onSetSleepTimer = { viewModel.setSleepTimer(it) },
             onSeekTo = { viewModel.seekTo(it) },
+            ambientTimeoutMs = ambientTimeoutMs,
         )
     }
 }
@@ -218,9 +221,11 @@ fun PlayerScreen(
  * OK on a line calls [onSeekTo]. The 睡眠計時 button opens [SleepTimerMenu]; [sleepTimer] is
  * read lazily (it ticks every second) by the status line under the controls only.
  *
- * Ambient mode: after [ambientTimeoutMs] without a key while playing, the controls fade out
- * and [AmbientOverlay] is shown. The first key only wakes the player (focus stays where it
+ * Ambient mode: after [ambientTimeoutMs] without a key while playing (never when it is <= 0,
+ * 設定 → 環境模式 關閉), the controls fade out and [AmbientOverlay] is shown. The first key only wakes the player (focus stays where it
  * was); media keys still act (and wake it), volume keys pass through.
+ *
+ * The 分享 chip next to the title opens [ShareDialog] (QR code of the song's web page).
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -255,6 +260,7 @@ fun PlayerContent(
     ambientTimeoutMs: Long = AMBIENT_TIMEOUT_MS,
     initialAmbient: Boolean = false,
     initialSleepMenuOpen: Boolean = false,
+    initialShareOpen: Boolean = false,
 ) {
     when {
         loadingState.isLoading -> {
@@ -286,17 +292,23 @@ fun PlayerContent(
             val sleepButtonFocus = remember { FocusRequester() }
             var sleepMenuOpen by remember { mutableStateOf(initialSleepMenuOpen) }
             var refocusSleepButton by remember { mutableStateOf(false) }
-            val syncedLyrics = remember(song.lyrics) { LrcParser.parse(song.lyrics) }
+            val shareFocus = remember { FocusRequester() }
+            var shareOpen by remember { mutableStateOf(initialShareOpen) }
+            var refocusShare by remember { mutableStateOf(false) }
+            // lyrics_is_lrc = false: plain lyrics, even if a line happens to look like a timestamp.
+            val syncedLyrics = remember(song.lyrics, song.lyricsIsLrc) {
+                if (song.lyricsIsLrc == false) null else LrcParser.parse(song.lyrics)
+            }
             val sleepActive by remember(sleepTimer) { derivedStateOf { sleepTimer().isActive } }
 
             // Ambient mode: entered after a while without keys while playing; any key leaves it.
             var ambient by remember { mutableStateOf(initialAmbient && playbackState.isPlaying) }
             var keyCount by remember { mutableIntStateOf(0) }
             var swallowKeyUp by remember { mutableStateOf<Int?>(null) }
-            LaunchedEffect(keyCount, playbackState.isPlaying, ambient, sleepMenuOpen) {
-                if (!playbackState.isPlaying) {
+            LaunchedEffect(keyCount, playbackState.isPlaying, ambient, sleepMenuOpen, shareOpen, ambientTimeoutMs) {
+                if (!playbackState.isPlaying || ambientTimeoutMs <= 0) {
                     ambient = false
-                } else if (!ambient && !sleepMenuOpen) {
+                } else if (!ambient && !sleepMenuOpen && !shareOpen) {
                     delay(ambientTimeoutMs)
                     ambient = true
                 }
@@ -365,6 +377,8 @@ fun PlayerContent(
                         SongInfo(
                             song = song,
                             onArtistSelected = onArtistSelected,
+                            onShare = { shareOpen = true },
+                            shareFocus = shareFocus,
                             probe = songInfoProbe,
                             modifier = Modifier
                                 .weight(1f)
@@ -484,6 +498,21 @@ fun PlayerContent(
                         },
                     )
                 }
+                if (shareOpen) {
+                    ShareDialog(
+                        song = song,
+                        onDismiss = {
+                            shareOpen = false
+                            refocusShare = true
+                        },
+                    )
+                }
+                if (refocusShare) {
+                    LaunchedEffect(Unit) {
+                        shareFocus.requestFocusWhenReady()
+                        refocusShare = false
+                    }
+                }
                 if (refocusSleepButton) {
                     // After the menu (and its focus trap) is gone.
                     LaunchedEffect(Unit) {
@@ -590,6 +619,8 @@ private fun SongInfo(
     song: Song,
     onArtistSelected: (String) -> Unit,
     modifier: Modifier = Modifier,
+    onShare: () -> Unit = {},
+    shareFocus: FocusRequester = remember { FocusRequester() },
     probe: () -> Unit = {},
 ) {
     SideEffect(probe) // recomposition probe for tests
@@ -622,14 +653,24 @@ private fun SongInfo(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        Text(
-            text = song.name,
-            style = MaterialTheme.typography.headlineSmall,
-            color = Color.White,
-            textAlign = TextAlign.Center,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
+        // Title with the 分享 chip beside it (above the artist, so Up from the seek bar still
+        // reaches the artist first).
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = song.name,
+                style = MaterialTheme.typography.headlineSmall,
+                color = Color.White,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            ShareChip(onClick = onShare, modifier = Modifier.focusRequester(shareFocus))
+        }
         Spacer(modifier = Modifier.height(4.dp))
         Surface(
             onClick = { onArtistSelected(song.artistUsername) },
@@ -678,6 +719,33 @@ private fun SongInfo(
                     Text("${song.likesCount}", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
                 }
             }
+        }
+    }
+}
+
+/** Small 分享 chip (icon + label) next to the song title. */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun ShareChip(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier,
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(50)),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = Color.White.copy(alpha = 0.12f),
+            contentColor = Color.White.copy(alpha = 0.85f),
+            focusedContainerColor = Color.White.copy(alpha = 0.9f),
+            focusedContentColor = Color.Black,
+        ),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(14.dp))
+            Text(SHARE_BUTTON_LABEL, style = MaterialTheme.typography.labelMedium, maxLines = 1)
         }
     }
 }

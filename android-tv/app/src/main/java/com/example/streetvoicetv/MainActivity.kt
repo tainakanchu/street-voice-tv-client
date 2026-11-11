@@ -1,6 +1,7 @@
 package com.example.streetvoicetv
 
 import android.app.Activity
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -23,6 +24,12 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.lifecycle.lifecycleScope
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -63,11 +70,19 @@ import com.example.streetvoicetv.ui.player.PlayerScreen
 import com.example.streetvoicetv.ui.playlist.PlaylistScreen
 import com.example.streetvoicetv.ui.search.SearchScreen
 import com.example.streetvoicetv.ui.search.SearchViewModel
+import com.example.streetvoicetv.ui.settings.SettingsScreen
+import com.example.streetvoicetv.tv.LaunchAction
+import com.example.streetvoicetv.tv.LaunchActionEffect
+import com.example.streetvoicetv.tv.LaunchIntents
+import com.example.streetvoicetv.tv.SETTINGS_ROUTE
+import com.example.streetvoicetv.tv.StartupAutoResume
+import com.example.streetvoicetv.tv.WatchNextSync
 import com.example.streetvoicetv.ui.theme.Dimens
 import com.example.streetvoicetv.ui.theme.LocalBottomOverlayInset
 import com.example.streetvoicetv.ui.theme.StreetVoiceTvTheme
 import com.example.streetvoicetv.ui.update.UpdateDialog
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -76,17 +91,36 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var playbackManager: PlaybackManager
     @Inject lateinit var sessionManager: SessionManager
     @Inject lateinit var updateChecker: UpdateChecker
+    @Inject lateinit var watchNextSync: WatchNextSync
+    @Inject lateinit var startupAutoResume: StartupAutoResume
+
+    /** Deep link / voice search of the launch or a new intent, until the app has handled it. */
+    private var launchAction by mutableStateOf<LaunchAction?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) launchAction = LaunchIntents.parse(intent)
+        watchNextSync.start()
+        val skipAutoResume = launchAction == LaunchAction.ResumeLastSession
+        lifecycleScope.launch { startupAutoResume.runOnce(skip = skipAutoResume) }
         // Delayed so it does not compete with the first screen's API calls; no-op unless the
         // update state is Idle, and throttled / ETag-cached inside UpdateChecker.
         updateChecker.checkForUpdate(initialDelayMs = UPDATE_CHECK_DELAY_MS)
         setContent {
             StreetVoiceTvTheme {
-                StreetVoiceTvApp(playbackManager, sessionManager, updateChecker, this)
+                StreetVoiceTvApp(
+                    playbackManager, sessionManager, updateChecker, this,
+                    launchAction = launchAction,
+                    onLaunchActionHandled = { launchAction = null },
+                )
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        LaunchIntents.parse(intent)?.let { launchAction = it }
     }
 }
 
@@ -129,6 +163,8 @@ fun StreetVoiceTvApp(
     sessionManager: SessionManager,
     updateChecker: UpdateChecker,
     activity: Activity,
+    launchAction: LaunchAction? = null,
+    onLaunchActionHandled: () -> Unit = {},
 ) {
     val navController = rememberNavController()
     // The root only needs what the NowPlayingBar shows (song, playing / paused, error).
@@ -181,6 +217,17 @@ fun StreetVoiceTvApp(
         navigateToPlayer(songs[index].id)
     }
 
+    LaunchActionEffect(
+        action = launchAction,
+        playbackManager = playbackManager,
+        onOpenPlayer = ::navigateToPlayer,
+        // A search already on top is replaced, so the new query is picked up.
+        onOpenSearch = {
+            navController.navigate(Routes.search(it)) { popUpTo(SEARCH_ROUTE) { inclusive = true } }
+        },
+        onHandled = onLaunchActionHandled,
+    )
+
     // Song context menu (long-press OK / MENU on any song) and its brief messages.
     val songMenuViewModel: SongMenuViewModel = hiltViewModel()
     val appMessages = rememberAppMessageState()
@@ -216,7 +263,13 @@ fun StreetVoiceTvApp(
         NavHost(
             navController = navController,
             startDestination = "home",
-            modifier = Modifier.fillMaxSize(),
+            // MENU on the remote opens the settings from anywhere (also when logged out).
+            modifier = Modifier.fillMaxSize().onKeyEvent { event ->
+                val open = event.type == KeyEventType.KeyDown && event.key == Key.Menu &&
+                    currentRoute != SETTINGS_ROUTE && currentRoute != "login"
+                if (open) navController.navigate(SETTINGS_ROUTE)
+                open
+            },
         ) {
             composable("home") {
                 HomeScreen(
@@ -332,8 +385,11 @@ fun StreetVoiceTvApp(
                     },
                     onBack = { navController.popBackStack() },
                     onArtistSelected = { artist -> navController.navigate(Routes.artist(artist.username)) },
+                    onOpenSettings = { navController.navigate(SETTINGS_ROUTE) },
                 )
             }
+
+            composable(SETTINGS_ROUTE) { SettingsScreen() }
 
             composable(
                 route = "playlist/{playlistId}",

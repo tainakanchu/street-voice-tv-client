@@ -7,6 +7,7 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.memory.MemoryCache
 import com.example.streetvoicetv.playback.PlaybackManager
+import com.example.streetvoicetv.tv.WatchNextSync
 import dagger.hilt.android.HiltAndroidApp
 import okhttp3.OkHttpClient
 import javax.inject.Inject
@@ -15,7 +16,8 @@ import javax.inject.Inject
  * Nothing playback related is created here: the player, MediaSession and preferences are
  * created lazily on first playback (PlaybackManager / PlaybackService), keeping startup light.
  * When an activity stops (app to the background) the playback session is saved (on the IO
- * dispatcher) so it can be restored next time.
+ * dispatcher) so it can be restored next time, and the Google TV 「繼續觀看」 entry gets the
+ * current position (WatchNextSync).
  */
 @HiltAndroidApp
 class App : Application(), ImageLoaderFactory {
@@ -26,10 +28,16 @@ class App : Application(), ImageLoaderFactory {
     @Inject
     lateinit var playbackManager: dagger.Lazy<PlaybackManager>
 
+    @Inject
+    lateinit var watchNextSync: dagger.Lazy<WatchNextSync>
+
     override fun onCreate() {
         super.onCreate()
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
-            override fun onActivityStopped(activity: Activity) = playbackManager.get().saveSessionNow()
+            override fun onActivityStopped(activity: Activity) {
+                playbackManager.get().saveSessionNow()
+                watchNextSync.get().onAppStopped()
+            }
             override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
             override fun onActivityStarted(activity: Activity) = Unit
             override fun onActivityResumed(activity: Activity) = Unit

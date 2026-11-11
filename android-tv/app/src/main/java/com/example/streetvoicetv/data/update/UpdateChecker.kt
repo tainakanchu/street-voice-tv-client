@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -51,7 +52,7 @@ class UpdateChecker internal constructor(
     private val json: Json,
     private val currentVersion: String,
     private val releaseUrl: String,
-    dispatcher: CoroutineDispatcher,
+    private val dispatcher: CoroutineDispatcher,
     private val clock: () -> Long,
 ) {
     @Inject
@@ -117,6 +118,36 @@ class UpdateChecker internal constructor(
                 throw e
             } catch (e: Exception) {
                 log("Update check failed", e)
+            }
+        }
+    }
+
+    /**
+     * 設定 → 檢查更新: checks right away, ignoring the [CHECK_INTERVAL_MS] throttle and an earlier
+     * 稍後. A newer version becomes [UpdateState.Available] (the update dialog shows it).
+     */
+    suspend fun checkNow(): UpdateCheckResult {
+        if (_state.value != UpdateState.Idle) return UpdateCheckResult.Busy
+        checkJob?.cancel()
+        return withContext(dispatcher) {
+            try {
+                val release = latestRelease(force = true) ?: return@withContext UpdateCheckResult.Failed
+                val latestVersion = release.tagName.removePrefix("v")
+                val apkAsset = release.assets.firstOrNull { it.name.endsWith(".apk") }
+                if (!isNewer(latestVersion, currentVersion) || apkAsset == null) {
+                    return@withContext UpdateCheckResult.UpToDate
+                }
+                dismissedVersion = null
+                _state.compareAndSet(
+                    UpdateState.Idle,
+                    UpdateState.Available(version = latestVersion, downloadUrl = apkAsset.downloadUrl, size = apkAsset.size),
+                )
+                UpdateCheckResult.Available(latestVersion)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                log("Update check failed", e)
+                UpdateCheckResult.Failed
             }
         }
     }
@@ -233,11 +264,11 @@ class UpdateChecker internal constructor(
     }
 
     /** The latest release, from cache within [CHECK_INTERVAL_MS], else re-validated via ETag. */
-    private fun latestRelease(): GitHubRelease? {
+    private fun latestRelease(force: Boolean = false): GitHubRelease? {
         val now = clock()
         val cachedBody = prefs.getString(KEY_RELEASE_JSON, null)
         val lastCheck = prefs.getLong(KEY_LAST_CHECK, 0L)
-        if (cachedBody != null && now - lastCheck in 0 until CHECK_INTERVAL_MS) {
+        if (!force && cachedBody != null && now - lastCheck in 0 until CHECK_INTERVAL_MS) {
             return json.decodeFromString<GitHubRelease>(cachedBody)
         }
 
@@ -344,6 +375,16 @@ class UpdateChecker internal constructor(
             return a.size.compareTo(b.size)
         }
     }
+}
+
+/** Outcome of [UpdateChecker.checkNow]. */
+sealed interface UpdateCheckResult {
+    data object UpToDate : UpdateCheckResult
+    data class Available(val version: String) : UpdateCheckResult
+    data object Failed : UpdateCheckResult
+
+    /** An update is already offered / downloading. */
+    data object Busy : UpdateCheckResult
 }
 
 sealed class UpdateState {

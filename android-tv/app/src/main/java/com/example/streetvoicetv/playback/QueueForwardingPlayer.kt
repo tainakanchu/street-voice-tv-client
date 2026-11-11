@@ -2,6 +2,7 @@ package com.example.streetvoicetv.playback
 
 import androidx.annotation.OptIn
 import androidx.media3.common.ForwardingPlayer
+import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 
@@ -10,6 +11,7 @@ import androidx.media3.common.util.UnstableApi
  * The underlying ExoPlayer only ever holds one item, so next / previous are routed to
  * [PlaybackManager]'s queue and always advertised; play / pause / seek go through the manager
  * so that its error recovery (fresh stream URL) and position state stay in charge.
+ * Play-from-search placeholders ([PlayFromSearch.HANDLED_MEDIA_ID]) are not loaded.
  */
 @OptIn(UnstableApi::class)
 internal class QueueForwardingPlayer(
@@ -42,6 +44,20 @@ internal class QueueForwardingPlayer(
     }
 
     override fun seekTo(positionMs: Long) = manager.seekTo(positionMs)
+
+    // A play-from-search request was already carried out through the manager
+    // (PlayFromSearchCallback); the placeholder item it hands back must not replace the media.
+    override fun setMediaItems(mediaItems: MutableList<MediaItem>) {
+        if (!PlayFromSearch.isHandled(mediaItems)) super.setMediaItems(mediaItems)
+    }
+
+    override fun setMediaItems(mediaItems: MutableList<MediaItem>, resetPosition: Boolean) {
+        if (!PlayFromSearch.isHandled(mediaItems)) super.setMediaItems(mediaItems, resetPosition)
+    }
+
+    override fun setMediaItems(mediaItems: MutableList<MediaItem>, startIndex: Int, startPositionMs: Long) {
+        if (!PlayFromSearch.isHandled(mediaItems)) super.setMediaItems(mediaItems, startIndex, startPositionMs)
+    }
 
     private companion object {
         val QUEUE_COMMANDS = intArrayOf(

@@ -13,6 +13,7 @@ import com.example.streetvoicetv.playback.SleepTimerOption
 import com.example.streetvoicetv.playback.SleepTimerState
 import com.example.streetvoicetv.ui.common.UserMessages
 import com.example.streetvoicetv.ui.common.userMessageFor
+import com.example.streetvoicetv.ui.settings.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
@@ -35,6 +36,7 @@ class PlayerViewModel @Inject constructor(
     private val playbackManager: PlaybackManager,
     sessionManager: SessionManager,
     savedStateHandle: SavedStateHandle,
+    settingsRepository: SettingsRepository,
 ) : ViewModel() {
 
     private val songId: Int = savedStateHandle.get<Int>("songId") ?: -1
@@ -71,6 +73,11 @@ class PlayerViewModel @Inject constructor(
 
     /** Sleep timer; a countdown ticks every second, so read it only where it is drawn. */
     val sleepTimer: StateFlow<SleepTimerState> = playbackManager.sleepTimer
+
+    /** 設定 → 環境模式: idle time before ambient mode (<= 0: never). */
+    val ambientTimeoutMs: StateFlow<Long> = settingsRepository.settings
+        .map { it.ambientTimeout.timeoutMs ?: 0L }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, settingsRepository.settings.value.ambientTimeout.timeoutMs ?: 0L)
 
     /** Detail already fetched by [loadSongAndPlay], so the song-change collector need not refetch it. */
     private var prefetched: Song? = null
