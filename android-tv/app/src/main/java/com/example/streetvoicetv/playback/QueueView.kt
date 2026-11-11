@@ -3,9 +3,12 @@ package com.example.streetvoicetv.playback
 import androidx.compose.runtime.Immutable
 import com.example.streetvoicetv.domain.model.Song
 
-/** One song of the play queue; [queueIndex] is its index in the queue as it was set (stable under shuffle). */
+/**
+ * One song of the play queue; [queueIndex] is its index in the queue (stable under shuffle;
+ * shifts when songs are inserted / removed before it). [isAutoplay]: appended by 自動播放.
+ */
 @Immutable
-data class QueueItem(val queueIndex: Int, val song: Song)
+data class QueueItem(val queueIndex: Int, val song: Song, val isAutoplay: Boolean = false)
 
 /**
  * The play queue in the order it will actually be played (published by [PlaybackManager.upNext]).
@@ -24,6 +27,8 @@ data class QueueView(
     val currentPosition: Int = -1,
     val shuffleEnabled: Boolean = false,
     val repeatMode: RepeatMode = RepeatMode.OFF,
+    /** 自動播放 is on: when the queue ends (repeat off) similar songs are appended. */
+    val autoplayEnabled: Boolean = false,
 ) {
     val isEmpty: Boolean get() = items.isEmpty()
     val current: QueueItem? get() = items.getOrNull(currentPosition)
@@ -41,4 +46,9 @@ data class QueueView(
     val reshufflesAtEnd: Boolean get() = wrapsAround && shuffleEnabled
 
     fun isPlayed(position: Int): Boolean = position < currentPosition
+
+    /** Position of the first upcoming song added by autoplay (the 「接下來自動播放」 divider goes above it), or -1. */
+    val autoplayDividerPosition: Int
+        get() = if (currentPosition < 0) -1 else
+            (currentPosition + 1 until items.size).firstOrNull { items[it].isAutoplay } ?: -1
 }
