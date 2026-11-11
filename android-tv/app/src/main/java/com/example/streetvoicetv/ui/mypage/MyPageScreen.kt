@@ -41,7 +41,10 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.OutlinedButton
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import androidx.compose.ui.platform.testTag
+import com.example.streetvoicetv.domain.model.Artist
 import com.example.streetvoicetv.domain.model.Playlist
+import com.example.streetvoicetv.ui.components.ArtistCard
 import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.ui.common.UserMessages
 import com.example.streetvoicetv.ui.common.PlayAllMode
@@ -65,6 +68,8 @@ import com.example.streetvoicetv.ui.theme.LocalBottomOverlayInset
 
 private val HPad = Dimens.SafeHorizontal
 
+const val MY_PAGE_FOLLOWING_TAG = "my_page_following"
+
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun MyPageScreen(
@@ -74,6 +79,7 @@ fun MyPageScreen(
     onLoggedOut: () -> Unit,
     onBack: () -> Unit,
     onRelogin: () -> Unit = {},
+    onArtistSelected: (Artist) -> Unit = {},
     viewModel: MyPageViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -94,6 +100,7 @@ fun MyPageScreen(
             viewModel.logout()
             onRelogin()
         },
+        onArtistSelected = onArtistSelected,
     )
 }
 
@@ -111,6 +118,7 @@ fun MyPageContent(
     onPlayAll: (PlayAllMode) -> Unit = {},
     onLoadMore: () -> Unit = {},
     onRetryLoadMore: () -> Unit = {},
+    onArtistSelected: (Artist) -> Unit = {},
 ) {
     var showLogoutConfirm by rememberSaveable { mutableStateOf(initialShowLogoutConfirm) }
     // When the dialog is cancelled, focus returns to the 登出 button that opened it
@@ -169,6 +177,7 @@ fun MyPageContent(
                     onPlayAll = onPlayAll,
                     onLoadMore = onLoadMore,
                     onRetryLoadMore = onRetryLoadMore,
+                    onArtistSelected = onArtistSelected,
                 )
             }
         }
@@ -201,12 +210,14 @@ private fun MyPageList(
     onPlayAll: (PlayAllMode) -> Unit,
     onLoadMore: () -> Unit,
     onRetryLoadMore: () -> Unit,
+    onArtistSelected: (Artist) -> Unit,
 ) {
     val profile = uiState.profile ?: return
     val bottomInset = LocalBottomOverlayInset.current
-    // Initial focus: first playlist, else first liked song (never the logout button).
+    // Initial focus: first playlist, else first followed artist, else first liked song
+    // (never the logout button).
     val firstItemFocus = rememberInitialFocus()
-    val hasItems = uiState.playlists.isNotEmpty() || uiState.likedSongs.isNotEmpty()
+    val hasItems = uiState.playlists.isNotEmpty() || uiState.likedSongs.isNotEmpty() || uiState.following.isNotEmpty()
     val hasErrors = uiState.playlistsError != null || uiState.likedError != null
 
     val listState = rememberLazyListState()
@@ -304,6 +315,32 @@ private fun MyPageList(
             item(key = "playlists_error") { InlineError(message) }
         }
 
+        // Followed artists
+        if (uiState.following.isNotEmpty()) {
+            item(key = "following_gap") { Spacer(Modifier.height(Dimens.SectionSpacing)) }
+            item(key = "following_header") { SectionHeader("追蹤中的音樂人") }
+            item(key = "following") {
+                LazyRow(
+                    modifier = Modifier
+                        .testTag(MY_PAGE_FOLLOWING_TAG)
+                        .focusRestorer(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(horizontal = HPad, vertical = CardRowVerticalPadding),
+                ) {
+                    itemsIndexed(uiState.following, key = { _, it -> it.username }) { index, artist ->
+                        ArtistCard(
+                            artist = artist,
+                            onClick = { onArtistSelected(artist) },
+                            modifier = Modifier.initialFocus(
+                                firstItemFocus.takeIf { requestInitialFocus },
+                                enabled = index == 0 && uiState.playlists.isEmpty(),
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+
         // Liked songs
         if (uiState.likedSongs.isNotEmpty()) {
             item(key = "liked_gap") { Spacer(Modifier.height(Dimens.SectionSpacing)) }
@@ -319,7 +356,7 @@ private fun MyPageList(
             itemsIndexed(uiState.likedSongs, key = { _, it -> "liked_${it.id}" }) { index, song ->
                 val focusModifier = Modifier.initialFocus(
                     firstItemFocus.takeIf { requestInitialFocus },
-                    enabled = index == 0 && uiState.playlists.isEmpty(),
+                    enabled = index == 0 && uiState.playlists.isEmpty() && uiState.following.isEmpty(),
                 )
                 SongListItem(
                     song = song,

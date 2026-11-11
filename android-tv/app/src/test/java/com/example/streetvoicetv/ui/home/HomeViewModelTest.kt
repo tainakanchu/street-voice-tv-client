@@ -3,6 +3,8 @@ package com.example.streetvoicetv.ui.home
 import android.app.Application
 import android.content.Context
 import com.example.streetvoicetv.data.auth.SessionManager
+import com.example.streetvoicetv.data.repository.FollowRepository
+import com.example.streetvoicetv.data.repository.FollowedSongsRepository
 import com.example.streetvoicetv.domain.model.Playlist
 import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.testutil.FakeStreetVoiceRepository
@@ -53,7 +55,7 @@ class HomeViewModelTest {
             }
         }
 
-        val vm = HomeViewModel(repository, session)
+        val vm = HomeViewModel(repository, session, FollowedSongsRepository(repository, FollowRepository(repository, session)))
         assertTrue(vm.uiState.value.isLoading)
 
         session.clearSession()
@@ -74,7 +76,7 @@ class HomeViewModelTest {
             calls++
             if (calls == 1) firstChart.await() else Result.success(emptyList())
         }
-        val vm = HomeViewModel(repository, session)
+        val vm = HomeViewModel(repository, session, FollowedSongsRepository(repository, FollowRepository(repository, session)))
         vm.retry()
         firstChart.complete(Result.success(listOf(Song(9, "stale", "x", "x", null, 1.0, 0))))
         assertTrue(vm.uiState.value.chartSongs.isEmpty())
@@ -87,7 +89,7 @@ class HomeViewModelTest {
         repository.currentUsernameResult = Result.failure(RuntimeException("offline"))
         session.saveSession("sid", "csrf", username = null)
 
-        val vm = HomeViewModel(repository, session)
+        val vm = HomeViewModel(repository, session, FollowedSongsRepository(repository, FollowRepository(repository, session)))
         assertTrue(vm.uiState.value.myPlaylists.isEmpty())
         assertTrue("getCurrentUsername" in repository.calls)
 
@@ -101,7 +103,7 @@ class HomeViewModelTest {
         repository.currentUsernameResult = Result.success("carol")
         session.saveSession("sid", "csrf", username = null)
 
-        val vm = HomeViewModel(repository, session)
+        val vm = HomeViewModel(repository, session, FollowedSongsRepository(repository, FollowRepository(repository, session)))
         assertEquals("carol", session.session.value.username)
         assertEquals(listOf(playlist(3, "carol")), vm.uiState.value.myPlaylists)
     }

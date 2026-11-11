@@ -2,6 +2,8 @@ package com.example.streetvoicetv.testutil
 
 import com.example.streetvoicetv.domain.model.Album
 import com.example.streetvoicetv.domain.model.Artist
+import com.example.streetvoicetv.domain.model.ChartPeriod
+import com.example.streetvoicetv.domain.model.Genre
 import com.example.streetvoicetv.domain.model.Page
 import com.example.streetvoicetv.domain.model.PlayableStream
 import com.example.streetvoicetv.domain.model.Playlist
@@ -137,6 +139,41 @@ class FakeStreetVoiceRepository : StreetVoiceRepository {
 
     override suspend fun getEditorChoice(limit: Int): Result<List<Song>> = editorChoiceResult
     override suspend fun getRecommendedPlaylists(limit: Int): Result<List<Playlist>> = recommendedPlaylistsResult
+
+    // --- Charts / follow ---
+
+    var genresResult: Result<List<Genre>> = notStubbed()
+
+    /** (slug, period, offset, limit) -> page. */
+    var onChartPage: (suspend (String, ChartPeriod, Int, Int) -> Result<Page<Song>>)? = null
+
+    /** username -> pages of the users they follow. */
+    var following: (suspend (String, Int, Int) -> Result<Page<Artist>>)? = null
+
+    /** (username, follow) -> result; default success. */
+    var onFollow: suspend (String, Boolean) -> Result<Unit> = { _, _ -> Result.success(Unit) }
+
+    override suspend fun getGenres(): Result<List<Genre>> = genresResult.also { calls += "getGenres" }
+
+    override suspend fun getChart(genreSlug: String, period: ChartPeriod, offset: Int, limit: Int): Result<Page<Song>> {
+        record("getChart($genreSlug, ${period.pathSegment}", offset)
+        return onChartPage?.invoke(genreSlug, period, offset, limit) ?: notStubbed()
+    }
+
+    override suspend fun getFollowing(username: String, limit: Int, offset: Int): Result<Page<Artist>> {
+        record("getFollowing($username", offset)
+        return following?.invoke(username, offset, limit) ?: notStubbed()
+    }
+
+    override suspend fun followArtist(username: String): Result<Unit> {
+        calls += "followArtist($username)"
+        return onFollow(username, true)
+    }
+
+    override suspend fun unfollowArtist(username: String): Result<Unit> {
+        calls += "unfollowArtist($username)"
+        return onFollow(username, false)
+    }
 
     override suspend fun getSongDetail(songId: Int): Result<Song> = notStubbed()
     override suspend fun getStreamUrl(songId: Int): Result<PlayableStream> = notStubbed()

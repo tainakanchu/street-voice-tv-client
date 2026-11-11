@@ -2,6 +2,8 @@ package com.example.streetvoicetv.domain.repository
 
 import com.example.streetvoicetv.domain.model.Album
 import com.example.streetvoicetv.domain.model.Artist
+import com.example.streetvoicetv.domain.model.ChartPeriod
+import com.example.streetvoicetv.domain.model.Genre
 import com.example.streetvoicetv.domain.model.Page
 import com.example.streetvoicetv.domain.model.PlayableStream
 import com.example.streetvoicetv.domain.model.Playlist
@@ -47,7 +49,35 @@ interface StreetVoiceRepository {
     suspend fun getRecommendedPlaylists(limit: Int = 10): Result<List<Playlist>>
     suspend fun getPlaylistSongs(playlistId: Int, limit: Int = DEFAULT_PAGE_SIZE, offset: Int = 0): Result<Page<Song>>
 
+    // Charts / genres
+    /** The 22 song genres (id 0 = 未分類). */
+    suspend fun getGenres(): Result<List<Genre>>
+
+    /**
+     * One page of a chart. [genreSlug] is a [com.example.streetvoicetv.domain.model.ChartCategory]
+     * slug ("all", "rock", ...); charts end after 50 entries.
+     */
+    suspend fun getChart(
+        genreSlug: String,
+        period: ChartPeriod,
+        offset: Int = 0,
+        limit: Int = CHART_PAGE_SIZE,
+    ): Result<Page<Song>>
+
+    // Follow
+    /** Users [username] follows (public), newest follow first. */
+    suspend fun getFollowing(username: String, limit: Int = DEFAULT_PAGE_SIZE, offset: Int = 0): Result<Page<Artist>>
+
+    /** Follows [username] (login required). */
+    suspend fun followArtist(username: String): Result<Unit>
+
+    /** Unfollows [username] (login required). */
+    suspend fun unfollowArtist(username: String): Result<Unit>
+
     companion object {
+        /** Page size of the chart screen. */
+        const val CHART_PAGE_SIZE = 20
+
         /** Page size of the detail lists (album / playlist / artist / liked songs). */
         const val DEFAULT_PAGE_SIZE = 30
 

@@ -33,13 +33,23 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.ui.platform.testTag
+import androidx.tv.material3.Button
+import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.Icon
+import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Tab
 import androidx.tv.material3.TabRow
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import com.example.streetvoicetv.domain.model.Album
+import com.example.streetvoicetv.domain.model.Artist
+import com.example.streetvoicetv.ui.components.ArtistListItem
 import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.ui.common.PlayAllMode
 import com.example.streetvoicetv.ui.components.AlbumListItem
@@ -63,6 +73,8 @@ fun ArtistScreen(
     onPlayAll: (List<Song>, PlayAllMode) -> Unit,
     onAlbumSelected: (Album) -> Unit,
     onBack: () -> Unit,
+    onArtistSelected: (Artist) -> Unit = {},
+    onLoginRequired: () -> Unit = {},
     viewModel: ArtistViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -79,6 +91,10 @@ fun ArtistScreen(
         onRetryLoadMoreSongs = { viewModel.retryLoadMoreSongs() },
         onLoadMoreAlbums = { viewModel.loadMoreAlbums() },
         onRetryLoadMoreAlbums = { viewModel.retryLoadMoreAlbums() },
+        onArtistSelected = onArtistSelected,
+        onToggleFollow = { viewModel.toggleFollow(onLoginRequired) },
+        onLoadMoreFollowing = { viewModel.loadMoreFollowing() },
+        onRetryLoadMoreFollowing = { viewModel.retryLoadMoreFollowing() },
     )
 }
 
@@ -97,6 +113,10 @@ fun ArtistContent(
     onRetryLoadMoreSongs: () -> Unit = {},
     onLoadMoreAlbums: () -> Unit = {},
     onRetryLoadMoreAlbums: () -> Unit = {},
+    onArtistSelected: (Artist) -> Unit = {},
+    onToggleFollow: () -> Unit = {},
+    onLoadMoreFollowing: () -> Unit = {},
+    onRetryLoadMoreFollowing: () -> Unit = {},
 ) {
     val bottomInset = LocalBottomOverlayInset.current
     when {
@@ -126,12 +146,14 @@ fun ArtistContent(
             val selectedListEmpty = when (uiState.selectedTab) {
                 ArtistTab.Songs -> uiState.songs.isEmpty()
                 ArtistTab.Albums -> uiState.albums.isEmpty()
+                ArtistTab.Following -> uiState.following.isEmpty()
             }
 
             val listState = rememberLazyListState()
             when (uiState.selectedTab) {
                 ArtistTab.Songs -> LoadMoreEffect(listState, uiState.songsLoadMore, onLoadMoreSongs)
                 ArtistTab.Albums -> LoadMoreEffect(listState, uiState.albumsLoadMore, onLoadMoreAlbums)
+                ArtistTab.Following -> LoadMoreEffect(listState, uiState.followingLoadMore, onLoadMoreFollowing)
             }
 
             LazyColumn(
@@ -192,6 +214,21 @@ fun ArtistContent(
                                     overflow = TextOverflow.Ellipsis,
                                 )
                             }
+                            if (uiState.follow.error != null) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = uiState.follow.error,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.error,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+
+                        if (!uiState.follow.isSelf) {
+                            Spacer(modifier = Modifier.width(20.dp))
+                            FollowButton(follow = uiState.follow, onClick = onToggleFollow)
                         }
                     }
                 }
@@ -220,6 +257,7 @@ fun ArtistContent(
                                     text = when (tab) {
                                         ArtistTab.Songs -> "歌曲 (${uiState.songsLoadMore.total ?: uiState.songs.size})"
                                         ArtistTab.Albums -> "專輯 (${uiState.albumsLoadMore.total ?: uiState.albums.size})"
+                                        ArtistTab.Following -> "追蹤中 (${uiState.followingLoadMore.total ?: uiState.following.size})"
                                     },
                                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                                 )
@@ -274,9 +312,71 @@ fun ArtistContent(
                             loadMoreFooter(uiState.albumsLoadMore, onRetryLoadMoreAlbums)
                         }
                     }
+
+                    ArtistTab.Following -> {
+                        if (uiState.following.isEmpty()) {
+                            item(key = "empty_following") {
+                                EmptyTab(uiState.followingError ?: "沒有追蹤中的音樂人", isError = uiState.followingError != null)
+                            }
+                        } else {
+                            itemsIndexed(uiState.following, key = { _, it -> "following_${it.username}" }) { index, followed ->
+                                ArtistListItem(
+                                    artist = followed,
+                                    onClick = { onArtistSelected(followed) },
+                                    modifier = Modifier
+                                        .initialFocus(firstItemFocus, enabled = index == 0)
+                                        .holdFocusWhileLoadingMore(index == uiState.following.lastIndex, uiState.followingLoadMore),
+                                )
+                            }
+                            loadMoreFooter(uiState.followingLoadMore, onRetryLoadMoreFollowing)
+                        }
+                    }
                 }
             }
         }
+    }
+}
+
+const val ARTIST_FOLLOW_BUTTON_TAG = "artist_follow_button"
+
+/** 追蹤 (filled) / 追蹤中 (outlined). Stays focusable while a request runs (presses are ignored). */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun FollowButton(follow: FollowUiState, onClick: () -> Unit) {
+    val modifier = Modifier.testTag(ARTIST_FOLLOW_BUTTON_TAG)
+    val content: @Composable () -> Unit = {
+        if (follow.inFlight) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(ButtonDefaults.IconSize),
+                color = LocalContentColor.current,
+                strokeWidth = 2.dp,
+            )
+        } else {
+            Icon(
+                imageVector = if (follow.isFollowing) Icons.Default.Check else Icons.Default.PersonAdd,
+                contentDescription = null,
+                modifier = Modifier.size(ButtonDefaults.IconSize),
+            )
+        }
+        Spacer(Modifier.width(ButtonDefaults.IconSpacing))
+        Text(if (follow.isFollowing) "追蹤中" else "追蹤")
+    }
+    // One button whose colours change: swapping composables would drop the focus on toggle.
+    val colors = if (follow.isFollowing) {
+        ButtonDefaults.colors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    } else {
+        ButtonDefaults.colors()
+    }
+    Button(
+        onClick = onClick,
+        modifier = modifier,
+        colors = colors,
+        contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
+    ) {
+        content()
     }
 }
 

@@ -27,4 +27,9 @@ data class SearchSongResult(
 data class SearchSongUser(
     val username: String,
     val nickname: String? = null,
-)
+    // `/user/{username}/songs/` nests the nickname under `profile`.
+    val profile: NestedUserProfile? = null,
+) {
+    val displayName: String
+        get() = nickname?.takeIf { it.isNotBlank() } ?: profile?.nickname?.takeIf { it.isNotBlank() } ?: username
+}
