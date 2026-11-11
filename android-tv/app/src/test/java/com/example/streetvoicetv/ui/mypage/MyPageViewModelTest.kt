@@ -3,6 +3,7 @@ package com.example.streetvoicetv.ui.mypage
 import android.app.Application
 import android.content.Context
 import com.example.streetvoicetv.data.auth.SessionManager
+import com.example.streetvoicetv.data.repository.FollowRepository
 import com.example.streetvoicetv.domain.model.Artist
 import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.testutil.FakeStreetVoiceRepository
@@ -43,7 +44,7 @@ class MyPageViewModelTest {
         repository.likedSongsResult = Result.failure(SocketTimeoutException())
         repository.onArtistPlaylists = { Result.success(emptyList()) }
 
-        val state = MyPageViewModel(repository, session).uiState.value
+        val state = MyPageViewModel(repository, session, FollowRepository(repository, session)).uiState.value
         assertEquals(artist, state.profile)
         assertEquals(UserMessages.TIMEOUT, state.likedError)
         assertNull(state.playlistsError)
@@ -57,7 +58,7 @@ class MyPageViewModelTest {
         repository.likedSongsResult = Result.success(listOf(song))
         repository.onArtistPlaylists = { Result.success(emptyList()) }
 
-        val state = MyPageViewModel(repository, session).uiState.value
+        val state = MyPageViewModel(repository, session, FollowRepository(repository, session)).uiState.value
         assertEquals("alice", session.session.value.username)
         assertEquals(artist, state.profile)
         assertEquals(listOf(song), state.likedSongs)
@@ -68,7 +69,7 @@ class MyPageViewModelTest {
     fun `username that cannot be fetched asks to log in again`() {
         session.saveSession("sid", "c", username = null)
         repository.currentUsernameResult = Result.failure(RuntimeException("403"))
-        val state = MyPageViewModel(repository, session).uiState.value
+        val state = MyPageViewModel(repository, session, FollowRepository(repository, session)).uiState.value
         assertTrue(state.needsLogin)
         assertFalse(state.isLoading)
     }
@@ -79,7 +80,7 @@ class MyPageViewModelTest {
         repository.artistDetailResult = Result.success(artist)
         repository.likedSongsResult = Result.success(emptyList())
         repository.onArtistPlaylists = { Result.success(emptyList()) }
-        val vm = MyPageViewModel(repository, session)
+        val vm = MyPageViewModel(repository, session, FollowRepository(repository, session))
         assertEquals(artist, vm.uiState.value.profile)
 
         session.clearSession() // e.g. a 401

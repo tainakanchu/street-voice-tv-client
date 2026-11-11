@@ -15,6 +15,14 @@ import com.example.streetvoicetv.screenshot.installFakeImageLoader
 import com.example.streetvoicetv.ui.components.NOW_PLAYING_BAR_TAG
 import com.example.streetvoicetv.ui.home.HomeContent
 import com.example.streetvoicetv.ui.home.HomeUiState
+import com.example.streetvoicetv.ui.home.FollowedNewSongs
+import com.example.streetvoicetv.ui.home.RecentSong
+import com.example.streetvoicetv.domain.model.ChartCategory
+import com.example.streetvoicetv.domain.model.ChartPeriod
+import com.example.streetvoicetv.domain.model.Song
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import com.example.streetvoicetv.ui.home.homeSectionTag
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -209,5 +217,127 @@ class HomeDpadTest {
                 compose.assertFocusedFullyVisible()
             }
         }
+    }
+
+    // ------------------------------------------------ 追蹤音樂人的新歌 / 曲風 / 本週排行
+
+    private val followedSongs = FakeData.songs.take(6).map { it.copy(id = it.id + 500) }
+    private val weekly = FakeData.songs.map { it.copy(id = it.id + 900) }
+    private val followedRow = FollowedNewSongs(
+        owner = "me",
+        songs = followedSongs.mapIndexed { i, song -> RecentSong(song, "${i + 1} 天前") },
+    )
+    private val discoveryState = state.copy(
+        genres = ChartCategory.forPeriod(ChartPeriod.Realtime),
+        weeklySongs = weekly,
+        followedNew = followedRow,
+    )
+
+    private var homeState by mutableStateOf(HomeUiState())
+    private val played = mutableListOf<List<Song>>()
+    private val chartTaps = mutableListOf<String>()
+
+    private fun setDiscoveryHome(initial: HomeUiState) {
+        homeState = initial
+        compose.setContent {
+            TvChrome {
+                HomeContent(
+                    uiState = homeState,
+                    isLoggedIn = true,
+                    profileImageUrl = null,
+                    onSongSelected = { _, _ -> },
+                    onPlaylistSelected = {},
+                    onSearchTap = {},
+                    onLoginTap = {},
+                    onMyPageTap = {},
+                    onPlayAll = { songs, _ -> played += songs },
+                    onChartTap = { genre, period -> chartTaps += "${period.pathSegment}/$genre" },
+                )
+            }
+        }
+        compose.waitForIdle()
+    }
+
+    @Test
+    fun discoveryRows_reachableTopToBottom() {
+        setDiscoveryHome(discoveryState)
+        // The followed artists' new songs are the first row and get the initial focus.
+        compose.assertFocused(homeCard(followedSongs[0].name, "followed_new"))
+        compose.assertFocusedFullyVisible()
+
+        // Up: the row's 播放全部 (queue = the row, newest first), then the top bar.
+        compose.dpad(Dpad.Up)
+        compose.assertFocused(hasText("播放全部") and inHomeSection("followed_new"))
+        compose.dpad(Dpad.Center)
+        assertEquals(listOf(followedSongs), played)
+        compose.dpad(Dpad.Up)
+        compose.assertFocused(HomeSearchBar)
+
+        // Down: back to the row (its cards, not the button), then the chart.
+        compose.dpad(Dpad.Down)
+        compose.assertFocused(inHomeSection("followed_new"))
+        compose.dpad(Dpad.Down)
+        compose.assertFocused(homeCard(songs[0].name, "chart"))
+        compose.assertFocusedFullyVisible()
+
+        // 曲風 chips: Center opens the realtime chart of that category.
+        compose.dpad(Dpad.Down)
+        compose.assertFocused(inHomeSection("genres"))
+        compose.dpad(Dpad.Left, Dpad.Left)
+        compose.assertFocused(hasText("全部") and inHomeSection("genres"))
+        compose.dpad(Dpad.Right, Dpad.Center)
+        assertEquals(listOf("realtime/rock"), chartTaps)
+        compose.assertFocusedFullyVisible()
+
+        // 本週排行: Down lands on the cards; Up from them reaches 查看全部.
+        compose.dpad(Dpad.Down)
+        compose.assertFocused(homeCard(weekly[0].name, "weekly"))
+        compose.assertFocusedFullyVisible()
+        compose.captureDpad("home_weekly_row")
+        compose.dpad(Dpad.Up)
+        compose.assertFocused(hasText("查看全部"))
+        compose.dpad(Dpad.Center)
+        assertEquals(listOf("realtime/rock", "weekly/all"), chartTaps)
+        compose.dpad(Dpad.Down)
+        compose.assertFocused(homeCard(weekly[0].name, "weekly"))
+
+        // ... and the existing rows follow.
+        compose.dpad(Dpad.Down)
+        compose.assertFocused(homeCard(editor[0].name, "editor"))
+        compose.dpad(Dpad.Down)
+        compose.assertFocused(inHomeSection("playlists"))
+        compose.assertFocusedFullyVisible()
+    }
+
+    @Test
+    fun followedRow_arrivingLater_takesTheInitialFocus() {
+        setDiscoveryHome(discoveryState.copy(followedNew = null))
+        compose.assertFocused(homeCard(songs[0].name, "chart"))
+
+        homeState = discoveryState
+        compose.waitForIdle()
+        compose.assertFocused(homeCard(followedSongs[0].name, "followed_new"))
+        compose.assertFocusedFullyVisible()
+    }
+
+    @Test
+    fun followedRow_arrivingAfterTheUserMoved_doesNotStealFocus() {
+        setDiscoveryHome(discoveryState.copy(followedNew = null))
+        compose.dpad(Dpad.Right)
+        compose.assertFocused(homeCard(songs[1].name, "chart"))
+
+        homeState = discoveryState
+        compose.waitForIdle()
+        compose.assertFocused(homeCard(songs[1].name, "chart"))
+        compose.dpad(Dpad.Up)
+        compose.assertFocused(inHomeSection("followed_new"))
+    }
+
+    @Test
+    fun followedRowError_retryReachable() {
+        setDiscoveryHome(discoveryState.copy(followedNew = FollowedNewSongs("me", emptyList(), error = "無法載入內容，請稍後再試")))
+        compose.assertFocused(homeCard(songs[0].name, "chart"))
+        compose.dpad(Dpad.Up)
+        compose.assertFocused(hasText("重試") and inHomeSection("followed_new"))
     }
 }

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.streetvoicetv.data.auth.SessionManager
 import com.example.streetvoicetv.data.auth.SessionState
+import com.example.streetvoicetv.data.repository.FollowRepository
 import com.example.streetvoicetv.domain.model.Artist
 import com.example.streetvoicetv.domain.model.Playlist
 import com.example.streetvoicetv.domain.model.Song
@@ -27,6 +28,7 @@ import javax.inject.Inject
 class MyPageViewModel @Inject constructor(
     private val repository: StreetVoiceRepository,
     private val sessionManager: SessionManager,
+    private val followRepository: FollowRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MyPageUiState(isLoading = true))
@@ -87,10 +89,13 @@ class MyPageViewModel @Inject constructor(
             val profileDeferred = async { repository.getArtistDetail(name) }
             val likedDeferred = async { likedSongs.fetchFirst() }
             val playlistsDeferred = async { repository.getArtistPlaylists(name) }
+            // Always fresh here (also refreshes the shared cache the 追蹤 buttons read).
+            val followingDeferred = async { followRepository.ensureLoaded(forceRefresh = true) }
 
             val profileResult = profileDeferred.await()
             val likedResult = likedDeferred.await()
             val playlistsResult = playlistsDeferred.await()
+            val followingResult = followingDeferred.await()
 
             likedSongs.reset(likedResult.getOrNull())
             _uiState.value = MyPageUiState(
@@ -102,6 +107,8 @@ class MyPageViewModel @Inject constructor(
                 // Partial failures are shown inline instead of as an empty section.
                 likedError = likedResult.exceptionOrNull()?.let { userMessageFor(TAG, it) },
                 playlistsError = playlistsResult.exceptionOrNull()?.let { userMessageFor(TAG, it) },
+                following = followingResult.getOrNull()?.artists.orEmpty(),
+                followingError = followingResult.exceptionOrNull()?.let { userMessageFor(TAG, it) },
             )
         }
     }
@@ -142,6 +149,9 @@ data class MyPageUiState(
     val playlists: List<Playlist> = emptyList(),
     val likedError: String? = null,
     val playlistsError: String? = null,
+    /** Artists the user follows (追蹤中的音樂人), newest follow first. */
+    val following: List<Artist> = emptyList(),
+    val followingError: String? = null,
     /** The session is gone or its user could not be determined: offer 重新登入. */
     val needsLogin: Boolean = false,
 )

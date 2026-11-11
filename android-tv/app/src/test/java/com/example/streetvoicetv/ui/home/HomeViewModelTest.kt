@@ -3,7 +3,15 @@ package com.example.streetvoicetv.ui.home
 import android.app.Application
 import android.content.Context
 import com.example.streetvoicetv.data.auth.SessionManager
+import com.example.streetvoicetv.data.repository.FollowRepository
+import com.example.streetvoicetv.data.repository.FollowedSongsRepository
+import com.example.streetvoicetv.domain.model.Artist
+import com.example.streetvoicetv.domain.model.ChartCategory
+import com.example.streetvoicetv.domain.model.ChartPeriod
+import com.example.streetvoicetv.domain.model.Page
 import com.example.streetvoicetv.domain.model.Playlist
+import com.example.streetvoicetv.domain.model.parsePublishAt
+import com.example.streetvoicetv.ui.common.UserMessages
 import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.testutil.FakeStreetVoiceRepository
 import com.example.streetvoicetv.testutil.MainDispatcherRule
@@ -11,6 +19,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -53,7 +62,7 @@ class HomeViewModelTest {
             }
         }
 
-        val vm = HomeViewModel(repository, session)
+        val vm = HomeViewModel(repository, session, FollowedSongsRepository(repository, FollowRepository(repository, session)))
         assertTrue(vm.uiState.value.isLoading)
 
         session.clearSession()
@@ -74,7 +83,7 @@ class HomeViewModelTest {
             calls++
             if (calls == 1) firstChart.await() else Result.success(emptyList())
         }
-        val vm = HomeViewModel(repository, session)
+        val vm = HomeViewModel(repository, session, FollowedSongsRepository(repository, FollowRepository(repository, session)))
         vm.retry()
         firstChart.complete(Result.success(listOf(Song(9, "stale", "x", "x", null, 1.0, 0))))
         assertTrue(vm.uiState.value.chartSongs.isEmpty())
@@ -87,7 +96,7 @@ class HomeViewModelTest {
         repository.currentUsernameResult = Result.failure(RuntimeException("offline"))
         session.saveSession("sid", "csrf", username = null)
 
-        val vm = HomeViewModel(repository, session)
+        val vm = HomeViewModel(repository, session, FollowedSongsRepository(repository, FollowRepository(repository, session)))
         assertTrue(vm.uiState.value.myPlaylists.isEmpty())
         assertTrue("getCurrentUsername" in repository.calls)
 
@@ -101,8 +110,103 @@ class HomeViewModelTest {
         repository.currentUsernameResult = Result.success("carol")
         session.saveSession("sid", "csrf", username = null)
 
-        val vm = HomeViewModel(repository, session)
+        val vm = HomeViewModel(repository, session, FollowedSongsRepository(repository, FollowRepository(repository, session)))
         assertEquals("carol", session.session.value.username)
         assertEquals(listOf(playlist(3, "carol")), vm.uiState.value.myPlaylists)
+    }
+
+    // --- 本週排行 / 曲風 / 追蹤音樂人的新歌 ---
+
+    private val followedSongs = FollowedSongsRepository(repository, FollowRepository(repository, session))
+
+    private fun homeVm() = HomeViewModel(repository, session, followedSongs)
+
+    private fun followA() {
+        repository.onArtistPlaylists = { Result.success(emptyList()) }
+        repository.following = { user, _, _ ->
+            Result.success(Page(if (user == "me") listOf(Artist(1, "a", "A", null, null, null, 0, 0, 0)) else emptyList(), 1, null))
+        }
+    }
+
+    @Test
+    fun `weekly chart and genre chips load with the other rows`() {
+        repository.onChartPage = { slug, period, _, limit ->
+            Result.success(Page(if (slug == "all" && period == ChartPeriod.Weekly) List(limit) { Song(100 + it, "w", "a", "a", null, 1.0, 0) } else emptyList(), null, null))
+        }
+        val state = homeVm().uiState.value
+        assertEquals(20, state.weeklySongs.size)
+        assertEquals(ChartCategory.forPeriod(ChartPeriod.Realtime), state.genres)
+        assertEquals(null, state.followedNew)
+    }
+
+    @Test
+    fun `followed artists' new songs - logged in, with release age`() {
+        session.saveSession("sid", "csrf", "me")
+        followA()
+        repository.onArtistSongs = {
+            Result.success(listOf(Song(5, "new", "A", "a", null, 1.0, 0, publishAt = "2026-11-03T18:18:42+0800")))
+        }
+        followedSongs.now = { parsePublishAt("2026-11-03T18:18:42+0800")!! + 3 * 86_400_000L }
+
+        val row = homeVm().uiState.value.followedNew!!
+        assertEquals(listOf(5), row.queue.map { it.id })
+        assertEquals("3 天前", row.songs.single().ageLabel)
+        assertNull(row.error)
+    }
+
+    @Test
+    fun `followed row - hidden when nothing is followed, error with retry when all fail`() {
+        session.saveSession("sid", "csrf", "me")
+        repository.onArtistPlaylists = { Result.success(emptyList()) }
+        repository.following = { _, _, _ -> Result.success(Page(emptyList(), 0, null)) }
+        assertNull(homeVm().uiState.value.followedNew)
+
+        followA()
+        repository.onArtistSongs = { Result.failure(RuntimeException("500")) }
+        // A new session-level cache (the empty result above is cached).
+        val vm = HomeViewModel(repository, session, FollowedSongsRepository(repository, FollowRepository(repository, session)))
+        assertEquals(UserMessages.LOAD_FAILED, vm.uiState.value.followedNew!!.error)
+
+        repository.onArtistSongs = { Result.success(listOf(Song(5, "new", "A", "a", null, 1.0, 0))) }
+        vm.retryFollowed()
+        assertEquals(listOf(5), vm.uiState.value.followedNew!!.queue.map { it.id })
+        assertNull(vm.uiState.value.followedNew!!.error)
+    }
+
+    @Test
+    fun `followed row is not blocked by a slow main row`() {
+        session.saveSession("sid", "csrf", "me")
+        followA()
+        repository.onArtistSongs = { Result.success(listOf(Song(5, "new", "A", "a", null, 1.0, 0))) }
+        val slowChart = CompletableDeferred<Result<List<Song>>>()
+        repository.onChart = { slowChart.await() }
+
+        val vm = homeVm()
+        assertTrue(vm.uiState.value.isLoading)
+        assertEquals(listOf(5), vm.uiState.value.followedNew!!.queue.map { it.id })
+        slowChart.complete(Result.success(emptyList()))
+        assertFalse(vm.uiState.value.isLoading)
+    }
+
+    @Test
+    fun `followed row is cached and refreshed on resume only when stale`() {
+        session.saveSession("sid", "csrf", "me")
+        followA()
+        repository.onArtistSongs = { Result.success(listOf(Song(5, "new", "A", "a", null, 1.0, 0))) }
+        var now = 0L
+        followedSongs.now = { now }
+        val vm = homeVm()
+        fun songRequests() = repository.calls.count { it.startsWith("getArtistSongs") }
+        assertEquals(1, songRequests())
+
+        vm.onResume()
+        assertEquals(1, songRequests())
+        now += 11 * 60_000
+        vm.onResume()
+        assertEquals(2, songRequests())
+
+        // Logout hides the row.
+        session.clearSession()
+        assertNull(vm.uiState.value.followedNew)
     }
 }

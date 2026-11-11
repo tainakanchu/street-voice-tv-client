@@ -10,4 +10,9 @@ data class Artist(
     val followersCount: Int,
     val followingCount: Int,
     val songsCount: Int,
+    /**
+     * Whether the logged-in user follows this artist as reported by the server (`is_follow`);
+     * null when the response does not say. Without a session it is always false.
+     */
+    val isFollowing: Boolean? = null,
 )

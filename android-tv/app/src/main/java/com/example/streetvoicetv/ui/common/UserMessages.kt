@@ -21,6 +21,7 @@ object UserMessages {
     const val INSTALL_PERMISSION = "請在設定中允許本應用程式「安裝不明應用程式」，返回後按「安裝」。"
     const val SESSION_EXPIRED = "登入資訊已失效，請重新登入"
     const val PARTIAL_LOAD_FAILED = "部分內容無法載入"
+    const val FOLLOW_FAILED = "無法更新追蹤狀態，請稍後再試"
 }
 
 /**

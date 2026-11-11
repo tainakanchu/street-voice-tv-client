@@ -40,7 +40,11 @@ import com.example.streetvoicetv.data.update.UpdateState
 import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.playback.PlaybackManager
 import com.example.streetvoicetv.playback.PlaybackState
+import com.example.streetvoicetv.domain.model.ChartCategory
+import com.example.streetvoicetv.domain.model.ChartPeriod
 import com.example.streetvoicetv.ui.album.AlbumScreen
+import com.example.streetvoicetv.ui.chart.ChartScreen
+import com.example.streetvoicetv.ui.chart.ChartViewModel
 import com.example.streetvoicetv.ui.common.PlayAllMode
 import com.example.streetvoicetv.ui.artist.ArtistScreen
 import com.example.streetvoicetv.ui.components.BlockFocusEntry
@@ -83,6 +87,7 @@ class MainActivity : ComponentActivity() {
 private const val UPDATE_CHECK_DELAY_MS = 5_000L
 
 internal const val PLAYER_ROUTE = "player/{songId}"
+internal const val CHART_ROUTE = "chart?genre={genre}&period={period}"
 
 /** Route builders. String arguments are Uri-encoded ("a/b", "#x", "50%" stay one argument). */
 internal object Routes {
@@ -90,6 +95,8 @@ internal object Routes {
     fun artist(username: String) = "artist/${Uri.encode(username)}"
     fun album(albumId: Int) = "album/$albumId"
     fun playlist(playlistId: Int) = "playlist/$playlistId"
+    fun chart(genreSlug: String = ChartCategory.ALL_SLUG, period: ChartPeriod = ChartPeriod.Realtime) =
+        "chart?genre=${Uri.encode(genreSlug)}&period=${period.pathSegment}"
 
     /**
      * Only an existing player on top of the back stack is replaced (so a new song does not
@@ -194,6 +201,27 @@ fun StreetVoiceTvApp(
                     onMyPageTap = { navController.navigate("mypage") },
                     isLoggedIn = isLoggedIn,
                     profileImageUrl = profileImageUrl,
+                    onPlayAll = ::playAll,
+                    onChartTap = { genre, period -> navController.navigate(Routes.chart(genre, period)) },
+                )
+            }
+
+            composable(
+                route = CHART_ROUTE,
+                arguments = listOf(
+                    navArgument(ChartViewModel.ARG_GENRE) {
+                        type = NavType.StringType
+                        defaultValue = ChartCategory.ALL_SLUG
+                    },
+                    navArgument(ChartViewModel.ARG_PERIOD) {
+                        type = NavType.StringType
+                        defaultValue = ChartPeriod.Realtime.pathSegment
+                    },
+                ),
+            ) {
+                ChartScreen(
+                    onSongSelected = { song, allSongs -> playSongInList(allSongs, song) },
+                    onPlayAll = ::playAll,
                 )
             }
 
@@ -237,6 +265,8 @@ fun StreetVoiceTvApp(
                     onPlayAll = ::playAll,
                     onAlbumSelected = { album -> navController.navigate(Routes.album(album.id)) },
                     onBack = { navController.popBackStack() },
+                    onArtistSelected = { artist -> navController.navigate(Routes.artist(artist.username)) },
+                    onLoginRequired = { navController.navigate("login") },
                 )
             }
 
@@ -263,6 +293,7 @@ fun StreetVoiceTvApp(
                         navController.navigate("login") { popUpTo("home") }
                     },
                     onBack = { navController.popBackStack() },
+                    onArtistSelected = { artist -> navController.navigate(Routes.artist(artist.username)) },
                 )
             }
 
