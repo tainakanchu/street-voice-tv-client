@@ -11,6 +11,11 @@ data class Song(
     val genre: Int? = null,
     val synopsis: String? = null,
     val lyrics: String? = null,
+    /**
+     * Whether [lyrics] are synced LRC as the API reports it (`lyrics_is_lrc`); null when unknown
+     * (list endpoints, or the field was missing). Detail responses only.
+     */
+    val lyricsIsLrc: Boolean? = null,
     val likesCount: Int = 0,
     val commentsCount: Int = 0,
     val shareCount: Int = 0,
