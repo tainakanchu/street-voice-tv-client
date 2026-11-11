@@ -12,6 +12,8 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import com.example.streetvoicetv.ui.album.AlbumContent
 import com.example.streetvoicetv.ui.album.AlbumUiState
+import com.example.streetvoicetv.ui.common.LoadMoreState
+import com.example.streetvoicetv.ui.common.PlayAllMode
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -58,6 +60,22 @@ class AlbumScreenshotTest {
         beforeCapture = { focusOnText(FakeData.songs[0].name) },
     ) {
         Album(AlbumUiState(album = FakeData.albums[0], songs = FakeData.songs))
+    }
+
+    /** 隨機播放 pressed while the remaining songs load: spinner in place of its icon. */
+    @Test
+    fun album_play_all_pending() = compose.captureTv(
+        "album_play_all_pending",
+        beforeCapture = { focusOnText("隨機播放") },
+    ) {
+        Album(
+            AlbumUiState(
+                album = FakeData.albums[0],
+                songs = FakeData.songs,
+                loadMore = LoadMoreState(endReached = false),
+                playAllPending = PlayAllMode.Shuffle,
+            ),
+        )
     }
 
     @Composable

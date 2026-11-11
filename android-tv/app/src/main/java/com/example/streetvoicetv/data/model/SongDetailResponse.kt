@@ -27,8 +27,18 @@ data class SongDetailResponse(
 @Serializable
 data class SongDetailUser(
     val username: String,
+    // v5 returns a flat user ({id, username, nickname, profile_image}, see docs/findings.md);
+    // older responses nest these under `profile`. Both shapes are accepted.
+    val id: Int? = null,
+    val nickname: String? = null,
+    @SerialName("profile_image") val profileImage: String? = null,
     val profile: SongDetailUserProfile? = null,
-)
+) {
+    val displayNickname: String?
+        get() = nickname?.takeIf { it.isNotBlank() } ?: profile?.nickname?.takeIf { it.isNotBlank() }
+    val displayImage: String?
+        get() = profileImage?.takeIf { it.isNotBlank() } ?: profile?.image?.takeIf { it.isNotBlank() }
+}
 
 @Serializable
 data class SongDetailUserProfile(

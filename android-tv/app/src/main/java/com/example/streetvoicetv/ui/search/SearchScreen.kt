@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -23,7 +24,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
@@ -41,7 +42,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.tv.material3.Button
 import androidx.tv.material3.ClickableSurfaceDefaults
@@ -53,6 +54,9 @@ import com.example.streetvoicetv.domain.model.Artist
 import com.example.streetvoicetv.domain.model.Playlist
 import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.ui.components.ArtistListItem
+import com.example.streetvoicetv.ui.components.LoadMoreEffect
+import com.example.streetvoicetv.ui.components.holdFocusWhileLoadingMore
+import com.example.streetvoicetv.ui.components.loadMoreFooter
 import com.example.streetvoicetv.ui.components.PlaylistListItem
 import com.example.streetvoicetv.ui.components.MessageAction
 import com.example.streetvoicetv.ui.components.MessageState
@@ -75,8 +79,8 @@ fun SearchScreen(
     onPlaylistSelected: (Playlist) -> Unit,
     viewModel: SearchViewModel = hiltViewModel(),
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    val searchHistory by viewModel.history.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val searchHistory by viewModel.history.collectAsStateWithLifecycle()
 
     SearchContent(
         uiState = uiState,
@@ -88,6 +92,8 @@ fun SearchScreen(
         onSongSelected = onSongSelected,
         onArtistSelected = onArtistSelected,
         onPlaylistSelected = onPlaylistSelected,
+        onLoadMoreSongs = { viewModel.loadMoreSongs() },
+        onRetryLoadMoreSongs = { viewModel.retryLoadMoreSongs() },
     )
 }
 
@@ -104,6 +110,8 @@ fun SearchContent(
     onSongSelected: (Song, List<Song>) -> Unit,
     onArtistSelected: (Artist) -> Unit,
     onPlaylistSelected: (Playlist) -> Unit,
+    onLoadMoreSongs: () -> Unit = {},
+    onRetryLoadMoreSongs: () -> Unit = {},
 ) {
     val bottomInset = LocalBottomOverlayInset.current
     // The text field gets the initial focus unless results / an error claim it.
@@ -206,7 +214,11 @@ fun SearchContent(
                 fun Modifier.firstResult(section: Int, index: Int): Modifier =
                     if (section == firstSection && index == 0) focusRequester(firstResultFocus) else this
 
+                val listState = rememberLazyListState()
+                LoadMoreEffect(listState, uiState.songsLoadMore, onLoadMoreSongs)
+
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier
                         .fillMaxSize()
                         .focusRestorer(),
@@ -214,44 +226,48 @@ fun SearchContent(
                     contentPadding = screenListPadding(bottomInset, top = 8.dp),
                 ) {
                     if (uiState.artists.isNotEmpty()) {
-                        item(key = "h_artists") { SectionHeader("音樂人") }
-                        itemsIndexed(uiState.artists, key = { _, it -> "artist_${it.id}" }) { index, artist ->
+                        item(key = "h_artists", contentType = "header") { SectionHeader("音樂人") }
+                        itemsIndexed(uiState.artists, key = { _, it -> "artist_${it.id}" }, contentType = { _, _ -> "artist" }) { index, artist ->
                             ArtistListItem(
                                 artist = artist,
                                 onClick = { onArtistSelected(artist) },
                                 modifier = Modifier.firstResult(0, index),
                             )
                         }
-                        item(key = "s_artists") { Spacer(modifier = Modifier.height(12.dp)) }
+                        item(key = "s_artists", contentType = "spacer") { Spacer(modifier = Modifier.height(12.dp)) }
                     }
 
                     if (uiState.playlists.isNotEmpty()) {
-                        item(key = "h_playlists") { SectionHeader("歌單") }
-                        itemsIndexed(uiState.playlists, key = { _, it -> "playlist_${it.id}" }) { index, playlist ->
+                        item(key = "h_playlists", contentType = "header") { SectionHeader("歌單") }
+                        itemsIndexed(uiState.playlists, key = { _, it -> "playlist_${it.id}" }, contentType = { _, _ -> "playlist" }) { index, playlist ->
                             PlaylistListItem(
                                 playlist = playlist,
                                 onClick = { onPlaylistSelected(playlist) },
                                 modifier = Modifier.firstResult(1, index),
                             )
                         }
-                        item(key = "s_playlists") { Spacer(modifier = Modifier.height(12.dp)) }
+                        item(key = "s_playlists", contentType = "spacer") { Spacer(modifier = Modifier.height(12.dp)) }
                     }
 
                     if (uiState.songs.isNotEmpty()) {
-                        item(key = "h_songs") { SectionHeader("歌曲") }
-                        itemsIndexed(uiState.songs, key = { _, it -> "song_${it.id}" }) { index, song ->
+                        item(key = "h_songs", contentType = "header") { SectionHeader("歌曲") }
+                        itemsIndexed(uiState.songs, key = { _, it -> "song_${it.id}" }, contentType = { _, _ -> "song" }) { index, song ->
                             SongListItem(
                                 song = song,
                                 onClick = { onSongSelected(song, uiState.songs) },
-                                modifier = Modifier.firstResult(2, index),
+                                modifier = Modifier
+                                    .firstResult(2, index)
+                                    .holdFocusWhileLoadingMore(index == uiState.songs.lastIndex, uiState.songsLoadMore),
                             )
                         }
+                        loadMoreFooter(uiState.songsLoadMore, onRetryLoadMoreSongs)
                     }
                 }
 
                 // Move focus to the first result whenever a new result set arrives - but not when
-                // the same results are shown again after Back (focusRoot restores focus then).
-                val resultsKey = listOf(uiState.artists, uiState.playlists, uiState.songs).hashCode()
+                // the same results are shown again after Back (focusRoot restores focus then), nor
+                // when more songs are appended to the current results.
+                val resultsKey = uiState.resultsGeneration
                 var focusedResultsKey by rememberSaveable { mutableStateOf<Int?>(null) }
                 LaunchedEffect(resultsKey) {
                     if (focusedResultsKey != resultsKey) {

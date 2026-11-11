@@ -1,22 +1,52 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- TV banner: 320x180dp recommended -->
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item>
-        <shape android:shape="rectangle">
-            <solid android:color="#FF121212" />
-            <corners android:radius="8dp" />
-        </shape>
-    </item>
-    <item
-        android:gravity="center"
-        android:left="16dp"
-        android:right="16dp">
-        <shape android:shape="rectangle">
-            <solid android:color="#FFF5565C" />
-            <corners android:radius="12dp" />
-            <size
-                android:width="80dp"
-                android:height="80dp" />
-        </shape>
-    </item>
-</layer-list>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+    <!-- TV launcher banner, concept "Vanishing Road". Text is outlined Inter Display Bold / Inter Bold (OFL). -->
+    <!-- Background -->
+    <path android:pathData="M0,0h320v180H0z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="0" android:startY="0" android:endX="0" android:endY="180">
+                <item android:offset="0" android:color="#FF1E1A1B" />
+                <item android:offset="1" android:color="#FF111111" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Soft accent glow behind the mark -->
+    <path android:pathData="M0,0h320v180H0z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="radial" android:centerX="55.54" android:centerY="90" android:gradientRadius="120">
+                <item android:offset="0" android:color="#29F5565C" />
+                <item android:offset="1" android:color="#00F5565C" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Mark: play triangle / road -->
+    <path android:pathData="M33.14,63.44Q33.14,58 37.86,60.7L84.41,87.3Q89.14,90 84.41,92.7L37.86,119.3Q33.14,122 33.14,116.56Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="33.14" android:startY="58" android:endX="89.14" android:endY="122">
+                <item android:offset="0" android:color="#FFFF7A7F" />
+                <item android:offset="1" android:color="#FFE23F46" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Mark: perspective centre-line dashes -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M33.14,84.56L49.94,86.19L49.94,93.81L33.14,95.44ZM57.14,86.89L63.43,87.5L63.43,92.5L57.14,93.11ZM67.66,87.91L71.11,88.25L71.11,91.75L67.66,92.09ZM74.06,88.54L76.28,88.75L76.28,91.25L74.06,91.46Z" />
+    <!-- Wordmark: StreetVoice -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M118.01 94.39C123.93 94.39 127.54 91.53 127.54 86.91C127.54 83.3 125.26 81.19 120.14 80.11L117.84 79.61C114.89 78.97 113.69 78.14 113.69 76.66C113.69 74.91 115.42 73.68 117.87 73.68C120.45 73.68 122.14 75.08 122.31 77.35H126.96C126.81 72.52 123.38 69.6 117.85 69.6C112.39 69.6 108.73 72.54 108.73 76.9C108.73 80.34 111.04 82.54 115.79 83.57L118.32 84.12C121.36 84.78 122.62 85.69 122.62 87.23C122.62 89.1 120.8 90.31 118.04 90.31C114.97 90.31 113.11 88.76 113.05 86.12H108.26C108.26 91.34 111.86 94.39 118.01 94.39ZM140.12 76.98H136.64V72.34H131.89V76.98H128.95V80.71H131.89V89.49C131.89 92.58 133.61 94 137.35 94H140.12V90.28H138.3C137.01 90.28 136.64 89.91 136.64 88.75V80.71H140.12ZM142.5 94H147.26V84.78C147.26 82.22 148.69 80.87 150.64 80.87C151.45 80.87 152.33 80.93 152.69 80.95V76.9C152.3 76.89 151.83 76.87 151.29 76.87C149.05 76.87 147.76 77.84 147.13 79.88H147.08V76.98H142.5ZM162.44 94.39C166.56 94.39 169.85 92.03 170.48 88.65H166.14C165.71 89.97 164.44 90.83 162.58 90.83C160.08 90.83 158.63 89.2 158.55 86.68H170.65V85.41C170.65 80.22 167.29 76.6 162.28 76.6C157.39 76.6 153.93 80.32 153.93 85.51C153.93 90.68 157.28 94.39 162.44 94.39ZM158.59 83.66C158.84 81.53 160.25 80.21 162.37 80.21C164.52 80.21 165.93 81.53 166.18 83.66ZM180.97 94.39C185.09 94.39 188.38 92.03 189.01 88.65H184.67C184.24 89.97 182.97 90.83 181.11 90.83C178.61 90.83 177.16 89.2 177.08 86.68H189.19V85.41C189.19 80.22 185.82 76.6 180.81 76.6C175.92 76.6 172.46 80.32 172.46 85.51C172.46 90.68 175.81 94.39 180.97 94.39ZM177.12 83.66C177.37 81.53 178.78 80.21 180.9 80.21C183.05 80.21 184.46 81.53 184.71 83.66ZM201.51 76.98H198.03V72.34H193.28V76.98H190.35V80.71H193.28V89.49C193.28 92.58 195 94 198.74 94H201.51V90.28H199.69C198.4 90.28 198.03 89.91 198.03 88.75V80.71H201.51ZM210.65 94H216.96L225.21 69.99H219.88L216.13 81.67C215.43 83.96 214.69 86.54 213.85 89.49C212.98 86.54 212.23 83.96 211.5 81.67L207.62 69.99H202.22ZM232.32 94.39C237.49 94.39 240.97 90.84 240.97 85.51C240.97 80.17 237.49 76.6 232.32 76.6C227.16 76.6 223.68 80.17 223.68 85.51C223.68 90.84 227.16 94.39 232.32 94.39ZM232.32 90.54C230.02 90.54 228.47 88.67 228.47 85.51C228.47 82.33 230.03 80.45 232.32 80.45C234.62 80.45 236.19 82.33 236.19 85.51C236.19 88.67 234.64 90.54 232.32 90.54ZM243.58 94H248.34V76.98H243.58ZM245.95 74.84C247.52 74.84 248.66 73.76 248.66 72.31C248.66 70.86 247.52 69.78 245.95 69.78C244.39 69.78 243.25 70.86 243.25 72.31C243.25 73.76 244.39 74.84 245.95 74.84ZM259.49 94.39C264.02 94.39 267.27 91.53 267.48 87.6H262.85C262.55 89.39 261.47 90.55 259.55 90.55C257.17 90.55 255.73 88.6 255.73 85.51C255.73 82.4 257.15 80.43 259.55 80.43C261.45 80.43 262.65 81.61 262.89 83.35H267.48C267.17 79.39 263.97 76.6 259.49 76.6C254.38 76.6 250.95 80.24 250.95 85.51C250.95 90.78 254.36 94.39 259.49 94.39ZM277.78 94.39C281.9 94.39 285.19 92.03 285.82 88.65H281.48C281.05 89.97 279.77 90.83 277.92 90.83C275.42 90.83 273.97 89.2 273.89 86.68H285.99V85.41C285.99 80.22 282.63 76.6 277.61 76.6C272.73 76.6 269.27 80.32 269.27 85.51C269.27 90.68 272.62 94.39 277.78 94.39ZM273.92 83.66C274.18 81.53 275.58 80.21 277.71 80.21C279.85 80.21 281.27 81.53 281.51 83.66Z" />
+    <!-- Wordmark: TV -->
+    <path
+        android:fillColor="#FFF5565C"
+        android:pathData="M108.61 108.15H111.51V116H113.45V108.15H116.34V106.54H108.61ZM122 116H124.53L127.77 106.54H125.63L124.17 111.11C123.88 112.06 123.59 113.15 123.27 114.44C122.95 113.16 122.65 112.06 122.35 111.11L120.84 106.54H118.68Z" />
+    <!-- Hairline rule after TV -->
+    <path
+        android:fillColor="#38FFFFFF"
+        android:pathData="M136.88,110.5H286.06A0.8,0.8 0 0 1 286.06,112.1H136.88A0.8,0.8 0 0 1 136.88,110.5Z" />
+</vector>

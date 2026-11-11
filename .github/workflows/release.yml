@@ -34,9 +34,28 @@ jobs:
       - name: Derive version from tag
         run: |
           VERSION_NAME="${GITHUB_REF_NAME#v}"
-          IFS=. read -r MAJOR MINOR PATCH <<< "${VERSION_NAME%%-*}"
+          CORE="${VERSION_NAME%%[-+]*}"
+          IFS=. read -r MAJOR MINOR PATCH <<< "$CORE"
+          MINOR="${MINOR:-0}"
+          PATCH="${PATCH:-0}"
+          for part in "$MAJOR" "$MINOR" "$PATCH"; do
+            if ! [[ "$part" =~ ^[0-9]+$ ]]; then
+              echo "::error::Tag $GITHUB_REF_NAME is not vMAJOR.MINOR.PATCH"; exit 1
+            fi
+          done
+          # 10#: no octal parsing of leading zeros. MINOR / PATCH get 3 digits each, so they
+          # must stay below 1000 or version codes would collide / go backwards.
+          MAJOR=$((10#$MAJOR)); MINOR=$((10#$MINOR)); PATCH=$((10#$PATCH))
+          if (( MINOR >= 1000 || PATCH >= 1000 )); then
+            echo "::error::MINOR and PATCH must be < 1000 (got $MINOR.$PATCH)"; exit 1
+          fi
+          VERSION_CODE=$(( MAJOR * 1000000 + MINOR * 1000 + PATCH ))
+          # Android's versionCode limit.
+          if (( VERSION_CODE > 2100000000 )); then
+            echo "::error::versionCode $VERSION_CODE exceeds 2100000000"; exit 1
+          fi
           echo "VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
-          echo "VERSION_CODE=$(( MAJOR * 10000 + MINOR * 100 + PATCH ))" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
 
       - name: Build release APK
         env:

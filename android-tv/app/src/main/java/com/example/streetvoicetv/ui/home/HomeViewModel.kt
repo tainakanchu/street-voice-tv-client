@@ -3,17 +3,17 @@ package com.example.streetvoicetv.ui.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.streetvoicetv.data.auth.SessionManager
+import com.example.streetvoicetv.data.auth.SessionState
 import com.example.streetvoicetv.domain.model.Playlist
 import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.domain.repository.StreetVoiceRepository
-import com.example.streetvoicetv.ui.common.UserMessages
 import com.example.streetvoicetv.ui.common.userMessageFor
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -26,22 +26,44 @@ class HomeViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
+    /** The running load; a new load (retry, login / logout) cancels it. */
+    private var loadJob: Job? = null
+
+    /** Whose playlists [HomeUiState.myPlaylists] holds. */
+    private var myPlaylistsOwner: String? = null
+
     init {
-        load()
         viewModelScope.launch {
-            sessionManager.isLoggedIn.drop(1).collect { load() }
+            // StateFlow is already distinct: this reloads on login, logout and when the
+            // username becomes available (e.g. fetched after login), and loads initially.
+            sessionManager.session.collect { session -> load(session) }
         }
     }
 
-    private fun load() {
-        _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+    private fun load(session: SessionState = sessionManager.session.value) {
+        loadJob?.cancel()
+        _uiState.value = _uiState.value.copy(
+            isLoading = true,
+            error = null,
+            // Never show the previous user's playlists while (re)loading.
+            myPlaylists = if (session.username == myPlaylistsOwner) _uiState.value.myPlaylists else emptyList(),
+        )
 
-        viewModelScope.launch {
+        loadJob = viewModelScope.launch {
+            val currentUsername = session.username
+
+            // Logged in but the username is unknown (e.g. it could not be fetched at login):
+            // fetch it; the session update triggers another load with the username.
+            if (session.isLoggedIn && currentUsername == null) {
+                launch {
+                    repository.getCurrentUsername().onSuccess { sessionManager.updateUsername(it) }
+                }
+            }
+
             val chartDeferred = async { repository.getRealtimeChart(limit = 10) }
             val editorDeferred = async { repository.getEditorChoice(limit = 10) }
             val playlistsDeferred = async { repository.getRecommendedPlaylists(limit = 20) }
 
-            val currentUsername = sessionManager.username.value
             val myPlaylistsDeferred = if (currentUsername != null) {
                 async { repository.getArtistPlaylists(currentUsername) }
             } else null
@@ -50,7 +72,10 @@ class HomeViewModel @Inject constructor(
             if (currentUsername != null && sessionManager.profileImageUrl.value == null) {
                 launch {
                     repository.getArtistDetail(currentUsername).onSuccess { artist ->
-                        sessionManager.saveProfileImage(artist.profileImageUrl)
+                        // Still the same user? (A logout may have happened meanwhile.)
+                        if (sessionManager.session.value.username == currentUsername) {
+                            sessionManager.saveProfileImage(artist.profileImageUrl)
+                        }
                     }
                 }
             }
@@ -71,6 +96,7 @@ class HomeViewModel @Inject constructor(
                 .firstNotNullOfOrNull { it.exceptionOrNull() }
             val error = if (nothingLoaded && firstFailure != null) userMessageFor(TAG, firstFailure) else null
 
+            myPlaylistsOwner = currentUsername
             _uiState.value = _uiState.value.copy(
                 isLoading = false,
                 chartSongs = chart,

@@ -14,10 +14,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -34,7 +35,7 @@ import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.OutlinedButton
@@ -43,7 +44,12 @@ import coil.compose.AsyncImage
 import com.example.streetvoicetv.domain.model.Playlist
 import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.ui.common.UserMessages
+import com.example.streetvoicetv.ui.common.PlayAllMode
 import com.example.streetvoicetv.ui.components.BlockFocusEntry
+import com.example.streetvoicetv.ui.components.LoadMoreEffect
+import com.example.streetvoicetv.ui.components.PlayAllButtons
+import com.example.streetvoicetv.ui.components.holdFocusWhileLoadingMore
+import com.example.streetvoicetv.ui.components.loadMoreFooter
 import com.example.streetvoicetv.ui.components.CardRowVerticalPadding
 import com.example.streetvoicetv.ui.components.ConfirmDialog
 import com.example.streetvoicetv.ui.components.MessageAction
@@ -63,12 +69,14 @@ private val HPad = Dimens.SafeHorizontal
 @Composable
 fun MyPageScreen(
     onSongSelected: (Song, List<Song>) -> Unit,
+    onPlayAll: (List<Song>, PlayAllMode) -> Unit,
     onPlaylistSelected: (Playlist) -> Unit,
     onLoggedOut: () -> Unit,
     onBack: () -> Unit,
+    onRelogin: () -> Unit = {},
     viewModel: MyPageViewModel = hiltViewModel(),
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     MyPageContent(
         uiState = uiState,
@@ -79,6 +87,13 @@ fun MyPageScreen(
             onLoggedOut()
         },
         onRetry = { viewModel.retry() },
+        onPlayAll = { mode -> viewModel.playAllLiked(mode, onPlayAll) },
+        onLoadMore = { viewModel.loadMoreLiked() },
+        onRetryLoadMore = { viewModel.retryLoadMoreLiked() },
+        onRelogin = {
+            viewModel.logout()
+            onRelogin()
+        },
     )
 }
 
@@ -92,6 +107,10 @@ fun MyPageContent(
     onLogout: () -> Unit,
     onRetry: () -> Unit = {},
     initialShowLogoutConfirm: Boolean = false,
+    onRelogin: () -> Unit = {},
+    onPlayAll: (PlayAllMode) -> Unit = {},
+    onLoadMore: () -> Unit = {},
+    onRetryLoadMore: () -> Unit = {},
 ) {
     var showLogoutConfirm by rememberSaveable { mutableStateOf(initialShowLogoutConfirm) }
     // When the dialog is cancelled, focus returns to the 登出 button that opened it
@@ -121,6 +140,15 @@ fun MyPageContent(
                     }
                 }
 
+                uiState.needsLogin -> {
+                    MessageState(
+                        message = UserMessages.SESSION_EXPIRED,
+                        isError = true,
+                        primaryAction = MessageAction("重新登入", onRelogin),
+                        requestInitialFocus = !showLogoutConfirm,
+                    )
+                }
+
                 uiState.profile == null -> {
                     MessageState(
                         message = UserMessages.PROFILE_FAILED,
@@ -138,6 +166,9 @@ fun MyPageContent(
                     onLogoutClick = { showLogoutConfirm = true },
                     logoutFocus = logoutFocus,
                     requestInitialFocus = !showLogoutConfirm,
+                    onPlayAll = onPlayAll,
+                    onLoadMore = onLoadMore,
+                    onRetryLoadMore = onRetryLoadMore,
                 )
             }
         }
@@ -167,14 +198,22 @@ private fun MyPageList(
     onLogoutClick: () -> Unit,
     logoutFocus: FocusRequester,
     requestInitialFocus: Boolean,
+    onPlayAll: (PlayAllMode) -> Unit,
+    onLoadMore: () -> Unit,
+    onRetryLoadMore: () -> Unit,
 ) {
     val profile = uiState.profile ?: return
     val bottomInset = LocalBottomOverlayInset.current
     // Initial focus: first playlist, else first liked song (never the logout button).
     val firstItemFocus = rememberInitialFocus()
     val hasItems = uiState.playlists.isNotEmpty() || uiState.likedSongs.isNotEmpty()
+    val hasErrors = uiState.playlistsError != null || uiState.likedError != null
+
+    val listState = rememberLazyListState()
+    LoadMoreEffect(listState, uiState.likedLoadMore, onLoadMore)
 
     LazyColumn(
+        state = listState,
         modifier = Modifier
             .fillMaxSize()
             .focusRoot(firstItemFocus),
@@ -258,10 +297,25 @@ private fun MyPageList(
             }
         }
 
+        // A section that failed to load says so instead of silently disappearing.
+        uiState.playlistsError?.takeIf { uiState.playlists.isEmpty() }?.let { message ->
+            item(key = "playlists_error_gap") { Spacer(Modifier.height(Dimens.SectionSpacing)) }
+            item(key = "playlists_error_header") { SectionHeader("我的歌單") }
+            item(key = "playlists_error") { InlineError(message) }
+        }
+
         // Liked songs
         if (uiState.likedSongs.isNotEmpty()) {
             item(key = "liked_gap") { Spacer(Modifier.height(Dimens.SectionSpacing)) }
             item(key = "liked_header") { SectionHeader("喜歡的歌曲") }
+            item(key = "liked_play_all") {
+                PlayAllButtons(
+                    pending = uiState.playAllPending,
+                    onPlayAll = onPlayAll,
+                    modifier = Modifier.padding(start = HPad, end = HPad, top = 4.dp, bottom = 8.dp),
+                )
+            }
+            // Playing a song queues the liked songs loaded so far.
             itemsIndexed(uiState.likedSongs, key = { _, it -> "liked_${it.id}" }) { index, song ->
                 val focusModifier = Modifier.initialFocus(
                     firstItemFocus.takeIf { requestInitialFocus },
@@ -272,12 +326,24 @@ private fun MyPageList(
                     onClick = { onSongSelected(song, uiState.likedSongs) },
                     modifier = Modifier
                         .padding(horizontal = HPad, vertical = 2.dp)
-                        .then(focusModifier),
+                        .then(focusModifier)
+                        .holdFocusWhileLoadingMore(index == uiState.likedSongs.lastIndex, uiState.likedLoadMore),
                 )
             }
+            loadMoreFooter(
+                state = uiState.likedLoadMore,
+                onRetry = onRetryLoadMore,
+                modifier = Modifier.padding(horizontal = HPad, vertical = 2.dp),
+            )
         }
 
-        if (!hasItems) {
+        uiState.likedError?.takeIf { uiState.likedSongs.isEmpty() }?.let { message ->
+            item(key = "liked_error_gap") { Spacer(Modifier.height(Dimens.SectionSpacing)) }
+            item(key = "liked_error_header") { SectionHeader("喜歡的歌曲") }
+            item(key = "liked_error") { InlineError(message) }
+        }
+
+        if (!hasItems && !hasErrors) {
             item(key = "empty") {
                 Box(
                     modifier = Modifier
@@ -294,6 +360,19 @@ private fun MyPageList(
             }
         }
     }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun InlineError(message: String) {
+    Text(
+        text = message,
+        style = MaterialTheme.typography.bodyLarge,
+        color = MaterialTheme.colorScheme.error,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.padding(horizontal = HPad, vertical = 8.dp),
+    )
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)

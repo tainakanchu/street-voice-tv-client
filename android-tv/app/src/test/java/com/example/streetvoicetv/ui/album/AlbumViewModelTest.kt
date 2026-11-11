@@ -6,6 +6,7 @@ import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.testutil.FakeStreetVoiceRepository
 import com.example.streetvoicetv.ui.common.UserMessages
 import com.example.streetvoicetv.testutil.MainDispatcherRule
+import com.example.streetvoicetv.testutil.lastPage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -29,7 +30,7 @@ class AlbumViewModelTest {
     @Test
     fun `loads album and songs`() {
         repository.albumDetailResult = Result.success(album)
-        repository.albumSongsResult = Result.success(songs)
+        repository.albumSongs = { _, _ -> lastPage(songs) }
 
         val vm = AlbumViewModel(repository, SavedStateHandle(mapOf("albumId" to 1)))
 
@@ -43,7 +44,7 @@ class AlbumViewModelTest {
     @Test
     fun `detail failure surfaces error and retry recovers`() {
         repository.albumDetailResult = Result.failure(RuntimeException("boom"))
-        repository.albumSongsResult = Result.success(songs)
+        repository.albumSongs = { _, _ -> lastPage(songs) }
 
         val vm = AlbumViewModel(repository, SavedStateHandle(mapOf("albumId" to 1)))
         assertEquals(UserMessages.LOAD_FAILED, vm.uiState.value.error)
@@ -60,5 +61,17 @@ class AlbumViewModelTest {
         val vm = AlbumViewModel(repository, SavedStateHandle())
         assertEquals(UserMessages.NOT_FOUND, vm.uiState.value.error)
         assertTrue(repository.calls.isEmpty())
+    }
+
+    @Test
+    fun `songs failure is surfaced instead of an empty album`() {
+        repository.albumDetailResult = Result.success(album)
+        repository.albumSongsResult = Result.failure(RuntimeException("boom"))
+
+        val state = AlbumViewModel(repository, SavedStateHandle(mapOf("albumId" to 1))).uiState.value
+        assertEquals(album, state.album)
+        assertTrue(state.songs.isEmpty())
+        assertEquals(UserMessages.LOAD_FAILED, state.songsError)
+        assertNull(state.error)
     }
 }

@@ -36,11 +36,11 @@ fun ArtistListItem(
             )
         },
         supportingContent = {
-            val counts = buildList {
-                if (artist.songsCount > 0) add("${artist.songsCount} 首歌曲")
-                if (artist.followersCount > 0) add("粉絲 ${artist.followersCount}")
-            }
-            SupportingRow(null, *counts.toTypedArray())
+            SupportingRow(
+                primary = null,
+                trailing = if (artist.songsCount > 0) "${artist.songsCount} 首歌曲" else null,
+                trailing2 = if (artist.followersCount > 0) "粉絲 ${artist.followersCount}" else null,
+            )
         },
         scale = listItemScale(),
         leadingContent = {

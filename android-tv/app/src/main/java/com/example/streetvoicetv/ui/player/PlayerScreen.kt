@@ -3,6 +3,7 @@ package com.example.streetvoicetv.ui.player
 import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -11,6 +12,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -29,6 +31,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.MusicNote
@@ -44,11 +48,14 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -60,11 +67,11 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.nativeKeyCode
 import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.nativeKeyCode
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
@@ -72,8 +79,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.tv.material3.Button
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -83,8 +91,14 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import com.example.streetvoicetv.domain.model.Song
+import com.example.streetvoicetv.playback.PlaybackManager
 import com.example.streetvoicetv.playback.PlaybackState
+import com.example.streetvoicetv.playback.QueueView
 import com.example.streetvoicetv.playback.RepeatMode
+import com.example.streetvoicetv.playback.formatMs
+import com.example.streetvoicetv.playback.progressOf
 import com.example.streetvoicetv.ui.components.MessageAction
 import com.example.streetvoicetv.ui.components.MessageState
 import com.example.streetvoicetv.ui.components.requestFocusWhenReady
@@ -103,6 +117,25 @@ const val SEEK_BAR_TAG = "player_seek_bar"
 /** Scroll step for the lyrics panel per D-pad press. */
 private const val LYRICS_SCROLL_STEP_PX = 240f
 
+
+/** Test tag of the playback error banner (error + 重試). */
+const val PLAYBACK_ERROR_TAG = "player_playback_error"
+
+/** Content description of the 佇列 (queue) toggle in the controls row. */
+const val QUEUE_BUTTON_DESCRIPTION = "佇列"
+
+/**
+ * Icon-only control buttons: slimmer than tv-material's 58dp minimum width so all seven
+ * (6 x 48 + 56 + 6 x 8 = 392dp) fit the left column (408dp at 960dp wide).
+ */
+private val ControlButtonPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+private val ControlButton = Modifier.width(48.dp)
+private val PlayButtonWidth = 56.dp
+
+/** Decode size (px) of the blurred background art. */
+private const val BACKGROUND_DECODE_PX = 64
+
+
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun PlayerScreen(
@@ -114,29 +147,54 @@ fun PlayerScreen(
     val playbackState by viewModel.playbackState.collectAsState()
     val isLiked by viewModel.isLiked.collectAsState()
     val isLoggedIn by viewModel.isLoggedIn.collectAsState()
+    val isDetailLoading by viewModel.isDetailLoading.collectAsState()
+    val upNext by viewModel.upNext.collectAsState()
+    // Collected here but only read (deferred) inside the progress UI, so a tick recomposes just that.
+    val position = viewModel.positionMs.collectAsState()
 
-    // Keep screen on while playing
-    KeepScreenOn()
+    // Keep the screen on only while playing (paused: let the TV screensaver start).
+    KeepScreenOn(enabled = playbackState.isPlaying)
 
-    PlayerContent(
-        loadingState = loadingState,
-        playbackState = playbackState,
-        isLiked = isLiked,
-        isLoggedIn = isLoggedIn,
-        onRetry = { viewModel.retry() },
-        onBack = onBack,
-        onArtistSelected = onArtistSelected,
-        onToggleShuffle = { viewModel.toggleShuffle() },
-        onSkipPrevious = { viewModel.skipPrevious() },
-        onTogglePlayPause = { viewModel.togglePlayPause() },
-        onSkipNext = { viewModel.skipNext() },
-        onToggleRepeatMode = { viewModel.toggleRepeatMode() },
-        onToggleLike = { viewModel.toggleLike() },
-        onSeek = { viewModel.seekTo(it) },
-    )
+    Box(
+        Modifier.onKeyEvent { event ->
+            // Media keys that no focused element consumed and that did not go to the session.
+            event.type == KeyEventType.KeyDown && viewModel.handleMediaKey(event.key.nativeKeyCode)
+        },
+    ) {
+        PlayerContent(
+            loadingState = loadingState,
+            playbackState = playbackState,
+            positionMs = { position.value },
+            isLiked = isLiked,
+            isLoggedIn = isLoggedIn,
+            isDetailLoading = isDetailLoading,
+            onRetry = { viewModel.retry() },
+            onRetryPlayback = { viewModel.retryPlayback() },
+            onBack = onBack,
+            onArtistSelected = onArtistSelected,
+            onToggleShuffle = { viewModel.toggleShuffle() },
+            onSkipPrevious = { viewModel.skipPrevious() },
+            onTogglePlayPause = { viewModel.togglePlayPause() },
+            onSkipNext = { viewModel.skipNext() },
+            onToggleRepeatMode = { viewModel.toggleRepeatMode() },
+            onToggleLike = { viewModel.toggleLike() },
+            onSeekBy = { viewModel.seekBy(it) },
+            upNext = upNext,
+            onPlayQueueItem = { viewModel.playQueueItem(it) },
+        )
+    }
 }
 
-/** Stateless player content (testable without Hilt / ExoPlayer / network). */
+/**
+ * Stateless player content (testable without Hilt / ExoPlayer / network).
+ *
+ * [positionMs] is read lazily, only by the progress bar / time text, so position ticks do not
+ * recompose the rest of the screen. [onSeekBy] gets the relative D-pad seek (ms).
+ *
+ * The 佇列 button switches the right-hand panel between the lyrics and the play queue
+ * ([upNext]); Back while the queue is shown returns to the lyrics (and focus to the 佇列 button
+ * if it was in the queue) instead of leaving the player. [initialQueueOpen] is for tests.
+ */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun PlayerContent(
@@ -153,8 +211,15 @@ fun PlayerContent(
     onSkipNext: () -> Unit,
     onToggleRepeatMode: () -> Unit,
     onToggleLike: () -> Unit,
-    onSeek: (Long) -> Unit = {},
+    onSeekBy: (Long) -> Unit = {},
+    positionMs: () -> Long = { playbackState.positionMs },
+    isDetailLoading: Boolean = false,
+    onRetryPlayback: () -> Unit = onRetry,
     lyricsScrollState: ScrollState = rememberScrollState(),
+    songInfoProbe: () -> Unit = {},
+    upNext: QueueView = QueueView(),
+    onPlayQueueItem: (queueIndex: Int) -> Unit = {},
+    initialQueueOpen: Boolean = false,
 ) {
     when {
         loadingState.isLoading -> {
@@ -179,39 +244,19 @@ fun PlayerContent(
 
         loadingState.isLoaded && playbackState.song != null -> {
             val song = playbackState.song
+            var queueOpen by rememberSaveable { mutableStateOf(initialQueueOpen) }
+            var focusQueueOnOpen by remember { mutableStateOf(false) }
+            var rightPanelHasFocus by remember { mutableStateOf(false) }
+            val queueButtonFocus = remember { FocusRequester() }
+
+            // Back closes the queue (back to the lyrics) instead of leaving the player.
+            BackHandler(enabled = queueOpen) {
+                if (rightPanelHasFocus) queueButtonFocus.requestFocus()
+                queueOpen = false
+            }
 
             Box(modifier = Modifier.fillMaxSize()) {
-                // Background: blurred album art
-                if (song.imageUrl != null) {
-                    AsyncImage(
-                        model = song.imageUrl,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .blur(60.dp, edgeTreatment = BlurredEdgeTreatment.Unbounded)
-                            .drawWithContent {
-                                drawContent()
-                                // Dark scrim over blurred image
-                                drawRect(Color.Black.copy(alpha = 0.7f))
-                            },
-                        contentScale = ContentScale.Crop,
-                    )
-                } else {
-                    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
-                }
-
-                // Subtle gradient from bottom
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.4f)),
-                                startY = 0f,
-                                endY = Float.MAX_VALUE,
-                            )
-                        )
-                )
+                PlayerBackground(imageUrl = song.imageUrl)
 
                 // Content (inside the TV safe area)
                 Row(
@@ -232,21 +277,32 @@ fun PlayerContent(
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         SongInfo(
-                            playbackState = playbackState,
+                            song = song,
                             onArtistSelected = onArtistSelected,
+                            probe = songInfoProbe,
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxWidth(),
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         SeekBar(
-                            playbackState = playbackState,
-                            onSeek = onSeek,
+                            positionMs = positionMs,
+                            durationMs = playbackState.durationMs,
+                            isLoading = playbackState.isLoading,
+                            onSeekBy = onSeekBy,
                             modifier = Modifier.fillMaxWidth(),
                         )
                         Spacer(modifier = Modifier.height(12.dp))
+                        // Previous restarts the song after 3 s, so it is enabled then even without a previous song.
+                        val pastRestartThreshold by remember(positionMs) {
+                            derivedStateOf { positionMs() > PlaybackManager.RESTART_THRESHOLD_MS }
+                        }
                         PlayerControls(
-                            playbackState = playbackState,
+                            isPlaying = playbackState.isPlaying,
+                            shuffleEnabled = playbackState.shuffleEnabled,
+                            repeatMode = playbackState.repeatMode,
+                            hasNext = playbackState.hasNext,
+                            previousEnabled = playbackState.hasPrevious || pastRestartThreshold,
                             isLiked = isLiked,
                             isLoggedIn = isLoggedIn,
                             onToggleShuffle = onToggleShuffle,
@@ -255,28 +311,141 @@ fun PlayerContent(
                             onSkipNext = onSkipNext,
                             onToggleRepeatMode = onToggleRepeatMode,
                             onToggleLike = onToggleLike,
+                            queueOpen = queueOpen,
+                            queueButtonFocus = queueButtonFocus,
+                            onToggleQueue = {
+                                focusQueueOnOpen = !queueOpen
+                                queueOpen = !queueOpen
+                            },
                         )
-                        if (playbackState.queueSize > 1) {
+                        if (playbackState.error != null) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            PlaybackErrorBanner(message = playbackState.error, onRetry = onRetryPlayback)
+                        } else if (playbackState.queueSize > 1 || upNext.next != null) {
                             Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                "${playbackState.queueIndex + 1} / ${playbackState.queueSize}",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = Color.White.copy(alpha = 0.7f),
+                            QueueStatusLine(
+                                position = if (playbackState.queueSize > 1) {
+                                    "${playbackState.queueIndex + 1} / ${playbackState.queueSize}"
+                                } else {
+                                    null
+                                },
+                                nextTitle = upNext.next?.song?.name,
                             )
                         }
                     }
 
-                    // Right: Lyrics / Synopsis (D-pad scrollable)
-                    LyricsPanel(
-                        synopsis = song.synopsis,
-                        lyrics = song.lyrics,
-                        scrollState = lyricsScrollState,
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight(),
-                    )
+                    // Right: lyrics / synopsis (D-pad scrollable), or the play queue.
+                    val rightModifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .onFocusChanged { rightPanelHasFocus = it.hasFocus }
+                    if (queueOpen) {
+                        QueuePanel(
+                            queue = upNext,
+                            onSelect = onPlayQueueItem,
+                            focusOnOpen = focusQueueOnOpen,
+                            onOpenFocusHandled = { focusQueueOnOpen = false },
+                            modifier = rightModifier,
+                        )
+                    } else {
+                        LyricsPanel(
+                            synopsis = song.synopsis,
+                            lyrics = song.lyrics,
+                            isLoading = isDetailLoading,
+                            scrollState = lyricsScrollState,
+                            modifier = rightModifier,
+                        )
+                    }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Blurred, darkened album art behind the player. Decoded tiny (the blur hides the detail
+ * anyway), so it is cheap to load and still looks soft on API < 31 where blur() is a no-op.
+ */
+@Composable
+private fun PlayerBackground(imageUrl: String?) {
+    if (imageUrl == null) {
+        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
+        return
+    }
+    val context = LocalContext.current
+    val request = remember(imageUrl) {
+        ImageRequest.Builder(context).data(imageUrl).size(BACKGROUND_DECODE_PX).build()
+    }
+    AsyncImage(
+        model = request,
+        contentDescription = null,
+        modifier = Modifier
+            .fillMaxSize()
+            .blur(12.dp, edgeTreatment = BlurredEdgeTreatment.Unbounded)
+            .drawWithContent {
+                drawContent()
+                // Dark scrim over blurred image
+                drawRect(Color.Black.copy(alpha = 0.7f))
+            },
+        contentScale = ContentScale.Crop,
+    )
+}
+
+/** "3 / 10 · 下一首：<title>" below the controls (single line; the title is ellipsized). */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun QueueStatusLine(position: String?, nextTitle: String?) {
+    val style = MaterialTheme.typography.labelMedium
+    val dim = Color.White.copy(alpha = 0.7f)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (position != null) {
+            Text(position, style = style, color = dim, maxLines = 1)
+        }
+        if (nextTitle != null) {
+            if (position != null) Text("  ·  ", style = style, color = dim, maxLines = 1)
+            Text(
+                text = "下一首：$nextTitle",
+                style = style,
+                color = Color.White.copy(alpha = 0.85f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .testTag(NEXT_SONG_HINT_TAG),
+            )
+        }
+    }
+}
+
+/** Playback error (e.g. the stream failed mid-song) with a retry that resumes at the last position. */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun PlaybackErrorBanner(message: String, onRetry: () -> Unit) {
+    Row(
+        modifier = Modifier.testTag(PLAYBACK_ERROR_TAG),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(
+            Icons.Default.ErrorOutline,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.error,
+            modifier = Modifier.size(20.dp),
+        )
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = Color.White,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        Button(onClick = onRetry) {
+            Text("重試")
         }
     }
 }
@@ -284,11 +453,12 @@ fun PlayerContent(
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun SongInfo(
-    playbackState: PlaybackState,
+    song: Song,
     onArtistSelected: (String) -> Unit,
     modifier: Modifier = Modifier,
+    probe: () -> Unit = {},
 ) {
-    val song = playbackState.song ?: return
+    SideEffect(probe) // recomposition probe for tests
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -380,17 +550,20 @@ private fun SongInfo(
 
 /**
  * Progress bar. Focusable: D-pad LEFT / RIGHT seeks -/+ 10 seconds.
+ * [positionMs] is only read inside the small fill / thumb / time composables below.
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun SeekBar(
-    playbackState: PlaybackState,
-    onSeek: (Long) -> Unit,
+    positionMs: () -> Long,
+    durationMs: Long,
+    isLoading: Boolean,
+    onSeekBy: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var focused by remember { mutableStateOf(false) }
     val primary = MaterialTheme.colorScheme.primary
-    val canSeek = playbackState.durationMs > 0
+    val canSeek = durationMs > 0
 
     Column(modifier = modifier) {
         Box(
@@ -406,7 +579,7 @@ private fun SeekBar(
                         KeyEvent.KEYCODE_DPAD_RIGHT -> SEEK_STEP_MS
                         else -> return@onPreviewKeyEvent false
                     }
-                    onSeek((playbackState.positionMs + delta).coerceIn(0L, playbackState.durationMs))
+                    onSeekBy(delta)
                     true
                 }
                 .focusable(enabled = canSeek),
@@ -420,44 +593,68 @@ private fun SeekBar(
                     .clip(RoundedCornerShape(4.dp))
                     .background(Color.White.copy(alpha = 0.2f)),
             )
-            Box(
-                Modifier
-                    .fillMaxWidth(playbackState.progress.coerceIn(0f, 1f))
-                    .height(trackHeight)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(primary),
-            )
+            ProgressFill(positionMs, durationMs, trackHeight, primary)
             if (focused) {
                 // Thumb at the current position
-                Row(Modifier.fillMaxWidth()) {
-                    val p = playbackState.progress.coerceIn(0f, 1f)
-                    if (p > 0f) Spacer(Modifier.weight(p))
-                    Box(
-                        Modifier
-                            .offset(x = (-8).dp)
-                            .size(16.dp)
-                            .background(Color.White, CircleShape)
-                            .border(2.dp, primary, CircleShape),
-                    )
-                    if (p < 1f) Spacer(Modifier.weight(1f - p))
-                }
+                ProgressThumb(positionMs, durationMs, primary)
             }
         }
         Spacer(modifier = Modifier.height(4.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(playbackState.formattedPosition, style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.8f))
+            PositionText(positionMs)
             if (focused) {
                 Text("◀ ▶ 快轉 / 倒轉 10 秒", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.8f))
+            } else if (isLoading) {
+                Text("載入中…", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.8f))
             }
-            Text(playbackState.formattedDuration, style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.8f))
+            Text(formatMs(durationMs), style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.8f))
         }
+    }
+}
+
+@Composable
+private fun ProgressFill(positionMs: () -> Long, durationMs: Long, trackHeight: Dp, color: Color) {
+    Box(
+        Modifier
+            .fillMaxWidth(progressOf(positionMs(), durationMs).coerceIn(0f, 1f))
+            .height(trackHeight)
+            .clip(RoundedCornerShape(4.dp))
+            .background(color),
+    )
+}
+
+@Composable
+private fun ProgressThumb(positionMs: () -> Long, durationMs: Long, color: Color) {
+    Row(Modifier.fillMaxWidth()) {
+        val p = progressOf(positionMs(), durationMs).coerceIn(0f, 1f)
+        if (p > 0f) Spacer(Modifier.weight(p))
+        Box(
+            Modifier
+                .offset(x = (-8).dp)
+                .size(16.dp)
+                .background(Color.White, CircleShape)
+                .border(2.dp, color, CircleShape),
+        )
+        if (p < 1f) Spacer(Modifier.weight(1f - p))
     }
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
+private fun PositionText(positionMs: () -> Long) {
+    // Recomposes only when the shown m:ss changes.
+    val text by remember(positionMs) { derivedStateOf { formatMs(positionMs()) } }
+    Text(text, style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.8f))
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
 private fun PlayerControls(
-    playbackState: PlaybackState,
+    isPlaying: Boolean,
+    shuffleEnabled: Boolean,
+    repeatMode: RepeatMode,
+    hasNext: Boolean,
+    previousEnabled: Boolean,
     isLiked: Boolean,
     isLoggedIn: Boolean,
     onToggleShuffle: () -> Unit,
@@ -466,6 +663,9 @@ private fun PlayerControls(
     onSkipNext: () -> Unit,
     onToggleRepeatMode: () -> Unit,
     onToggleLike: () -> Unit,
+    queueOpen: Boolean,
+    queueButtonFocus: FocusRequester,
+    onToggleQueue: () -> Unit,
 ) {
     val playPauseFocus = remember { FocusRequester() }
     val primary = MaterialTheme.colorScheme.primary
@@ -475,56 +675,73 @@ private fun PlayerControls(
         modifier = Modifier
             .focusRestorer(playPauseFocus)
             .focusGroup(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Button(onClick = onToggleShuffle) {
+        Button(onClick = onToggleShuffle, modifier = ControlButton, contentPadding = ControlButtonPadding) {
             Icon(
                 Icons.Default.Shuffle,
                 "隨機播放",
-                tint = if (playbackState.shuffleEnabled) primary else LocalContentColor.current,
+                tint = if (shuffleEnabled) primary else LocalContentColor.current,
             )
         }
         Button(
             onClick = onSkipPrevious,
-            enabled = playbackState.hasPrevious || playbackState.positionMs > 3000,
+            enabled = previousEnabled,
+            modifier = ControlButton,
+            contentPadding = ControlButtonPadding,
         ) {
             Icon(Icons.Default.SkipPrevious, "上一首")
         }
         Button(
             onClick = onTogglePlayPause,
-            modifier = Modifier.focusRequester(playPauseFocus),
+            modifier = Modifier.width(PlayButtonWidth).focusRequester(playPauseFocus),
+            contentPadding = ControlButtonPadding,
         ) {
             Icon(
-                if (playbackState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                if (playbackState.isPlaying) "暫停" else "播放",
+                if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                if (isPlaying) "暫停" else "播放",
                 Modifier.size(32.dp),
             )
         }
         Button(
             onClick = onSkipNext,
-            enabled = playbackState.hasNext,
+            enabled = hasNext,
+            modifier = ControlButton,
+            contentPadding = ControlButtonPadding,
         ) {
             Icon(Icons.Default.SkipNext, "下一首")
         }
-        Button(onClick = onToggleRepeatMode) {
+        Button(onClick = onToggleRepeatMode, modifier = ControlButton, contentPadding = ControlButtonPadding) {
             Icon(
-                when (playbackState.repeatMode) {
+                when (repeatMode) {
                     RepeatMode.ONE -> Icons.Default.RepeatOne
                     else -> Icons.Default.Repeat
                 },
                 "重複播放",
-                tint = if (playbackState.repeatMode != RepeatMode.OFF) primary else LocalContentColor.current,
+                tint = if (repeatMode != RepeatMode.OFF) primary else LocalContentColor.current,
             )
         }
         if (isLoggedIn) {
-            Button(onClick = onToggleLike) {
+            Button(onClick = onToggleLike, modifier = ControlButton, contentPadding = ControlButtonPadding) {
                 Icon(
                     if (isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                     if (isLiked) "取消喜歡" else "喜歡",
                     tint = if (isLiked) primary else LocalContentColor.current,
                 )
             }
+        }
+        // Switches the right-hand panel between the lyrics and the play queue.
+        Button(
+            onClick = onToggleQueue,
+            modifier = ControlButton.focusRequester(queueButtonFocus),
+            contentPadding = ControlButtonPadding,
+        ) {
+            Icon(
+                Icons.AutoMirrored.Filled.QueueMusic,
+                QUEUE_BUTTON_DESCRIPTION,
+                tint = if (queueOpen) primary else LocalContentColor.current,
+            )
         }
     }
 
@@ -543,8 +760,14 @@ private fun LyricsPanel(
     lyrics: String?,
     scrollState: ScrollState,
     modifier: Modifier = Modifier,
+    isLoading: Boolean = false,
 ) {
     if (synopsis.isNullOrBlank() && lyrics.isNullOrBlank()) {
+        if (isLoading) {
+            // Details still loading: don't flash "no lyrics".
+            Box(modifier)
+            return
+        }
         Box(modifier, contentAlignment = Alignment.Center) {
             Text(
                 "沒有簡介或歌詞",
@@ -623,13 +846,14 @@ private fun LyricsPanel(
     }
 }
 
-/** FLAG_KEEP_SCREEN_ON を再生画面表示中だけ設定する */
+
+/** FLAG_KEEP_SCREEN_ON while [enabled] (playing) on the player screen. */
 @Composable
-private fun KeepScreenOn() {
+private fun KeepScreenOn(enabled: Boolean) {
     val context = LocalContext.current
-    DisposableEffect(Unit) {
+    DisposableEffect(enabled) {
         val window = (context as? ComponentActivity)?.window
-        window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        if (enabled) window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         onDispose {
             window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }

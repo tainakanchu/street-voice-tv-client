@@ -20,7 +20,7 @@ val copyRobolectricAndroidAll by tasks.registering(Sync::class) {
 
 android {
     namespace = "com.example.streetvoicetv"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.example.streetvoicetv"
@@ -66,10 +66,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
     buildFeatures {
         compose = true
         buildConfig = true
@@ -96,8 +92,23 @@ android {
     }
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
+}
+
 roborazzi {
     outputDir.set(file("src/test/screenshots"))
+}
+
+// Compose compiler stability / skippability reports: ./gradlew assembleRelease -PcomposeReports=true
+// → app/build/compose_compiler/{reports,metrics}
+if (providers.gradleProperty("composeReports").orNull == "true") {
+    composeCompiler {
+        reportsDestination = layout.buildDirectory.dir("compose_compiler/reports")
+        metricsDestination = layout.buildDirectory.dir("compose_compiler/metrics")
+    }
 }
 
 dependencies {
@@ -131,11 +142,13 @@ dependencies {
     implementation(libs.media3.exoplayer.hls)
     implementation(libs.media3.ui)
     implementation(libs.media3.session)
+    implementation(libs.media3.datasource.okhttp)
 
     // Hilt
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
-    implementation(libs.hilt.navigation.compose)
+    ksp(libs.kotlin.metadata.jvm)
+    implementation(libs.hilt.lifecycle.viewmodel.compose)
 
     // OkHttp
     implementation(libs.okhttp)
@@ -152,6 +165,7 @@ dependencies {
     testImplementation(libs.robolectric)
     robolectricAndroidAll(libs.robolectric.android.all)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.okhttp.mockwebserver)
     testImplementation(composeBom)
     testImplementation(libs.compose.ui.test.junit4)
     testImplementation(libs.roborazzi)

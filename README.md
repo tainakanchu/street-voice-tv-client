@@ -58,7 +58,7 @@ An unofficial client for listening to [StreetVoice](https://streetvoice.com) mus
 
 - [Nix](https://nixos.org/download/) (推薦 recommended) 或 or:
   - JDK 21 (tests require 21; app bytecode targets 17)
-  - Android SDK (Platform 35, Build Tools 35)
+  - Android SDK (Platform 36, Build Tools 35)
   - Node.js 22+ (僅調查腳本 for research scripts only)
 
 ### 使用 Nix
@@ -128,6 +128,10 @@ cd android-tv
   On failure, diff images are written to `app/build/outputs/roborazzi/` (uploaded as a CI artifact).
 - UI 有意變更後，執行 `recordRoborazziDebug` 並提交更新後的 PNG。
   After an intentional UI change, re-run `recordRoborazziDebug` and commit the updated PNGs.
+- Compose 編譯器報告（穩定性／可略過性）：`./gradlew assembleRelease -PcomposeReports=true`，
+  輸出到 `app/build/compose_compiler/`。
+  Compose compiler stability / skippability reports: `./gradlew assembleRelease -PcomposeReports=true`
+  (written to `app/build/compose_compiler/{reports,metrics}`).
 
 ### 調查腳本 Research Scripts
 
