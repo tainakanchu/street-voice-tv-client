@@ -48,7 +48,10 @@ fun MediaCard(
     imageHeight: Dp,
     modifier: Modifier = Modifier,
     rank: Int? = null,
+    /** Text badge on the image (e.g. 「3 天前」); shown instead of the rank. */
+    badge: String? = null,
 ) {
+    val badgeText = badge ?: rank?.let { "#$it" }
     Surface(
         onClick = onClick,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
@@ -67,9 +70,9 @@ fun MediaCard(
                         .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)),
                     contentScale = ContentScale.Crop,
                 )
-                if (rank != null) {
+                if (badgeText != null) {
                     Text(
-                        text = "#$rank",
+                        text = badgeText,
                         style = MaterialTheme.typography.labelLarge,
                         color = Color.White,
                         modifier = Modifier
@@ -106,7 +109,13 @@ fun MediaCard(
 }
 
 @Composable
-fun SongCard(song: Song, onClick: () -> Unit, modifier: Modifier = Modifier, rank: Int? = null) {
+fun SongCard(
+    song: Song,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    rank: Int? = null,
+    badge: String? = null,
+) {
     MediaCard(
         title = song.name,
         subtitle = song.artistName,
@@ -115,7 +124,9 @@ fun SongCard(song: Song, onClick: () -> Unit, modifier: Modifier = Modifier, ran
         width = 150.dp,
         imageHeight = 150.dp,
         rank = rank,
-        modifier = modifier,
+        badge = badge,
+        // Long-press OK / MENU: the song context menu.
+        modifier = modifier.songMenuTrigger(song),
     )
 }
 

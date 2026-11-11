@@ -39,6 +39,17 @@ class RepositoryMappingTest {
     }
 
     @Test
+    fun `lyrics_is_lrc maps to lyricsIsLrc and stays null when absent`() {
+        fun parse(extra: String) = json.decodeFromString<SongDetailResponse>(
+            """{"id":1,"name":"n","lyrics":"[00:01.00]a"$extra,"user":{"username":"u"}}""",
+        ).toDomain()
+        assertEquals(true, parse(",\"lyrics_is_lrc\":true").lyricsIsLrc)
+        assertEquals(false, parse(",\"lyrics_is_lrc\":false").lyricsIsLrc)
+        assertEquals(null, parse("").lyricsIsLrc)
+        assertEquals(null, parse(",\"lyrics_is_lrc\":null").lyricsIsLrc)
+    }
+
+    @Test
     fun `runCatchingCancellable rethrows cancellation but wraps other errors`() {
         assertTrue(runCatchingCancellable { error("boom") }.isFailure)
         assertEquals(3, runCatchingCancellable { 3 }.getOrNull())

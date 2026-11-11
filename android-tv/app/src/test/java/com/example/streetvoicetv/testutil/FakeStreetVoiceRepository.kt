@@ -2,6 +2,8 @@ package com.example.streetvoicetv.testutil
 
 import com.example.streetvoicetv.domain.model.Album
 import com.example.streetvoicetv.domain.model.Artist
+import com.example.streetvoicetv.domain.model.ChartPeriod
+import com.example.streetvoicetv.domain.model.Genre
 import com.example.streetvoicetv.domain.model.Page
 import com.example.streetvoicetv.domain.model.PlayableStream
 import com.example.streetvoicetv.domain.model.Playlist
@@ -55,6 +57,9 @@ class FakeStreetVoiceRepository : StreetVoiceRepository {
     var onArtistPlaylists: (suspend (String) -> Result<List<Playlist>>)? = null
     var onChart: (suspend () -> Result<List<Song>>)? = null
 
+    /** Artist songs by username (first page); replaces [artistSongs] / [artistSongsResult] when set. */
+    var onArtistSongs: (suspend (String) -> Result<List<Song>>)? = null
+
     var searchSongs: FakePages<Song>? = null
     var albumSongs: FakePages<Song>? = null
     var artistSongs: FakePages<Song>? = null
@@ -104,6 +109,7 @@ class FakeStreetVoiceRepository : StreetVoiceRepository {
 
     override suspend fun getArtistSongs(username: String, limit: Int, offset: Int): Result<Page<Song>> {
         record("getArtistSongs($username", offset)
+        onArtistSongs?.let { hook -> return hook(username).map { Page(it, it.size, null) } }
         return paged(artistSongs, offset, limit) { artistSongsResult }
     }
 
@@ -138,10 +144,63 @@ class FakeStreetVoiceRepository : StreetVoiceRepository {
     override suspend fun getEditorChoice(limit: Int): Result<List<Song>> = editorChoiceResult
     override suspend fun getRecommendedPlaylists(limit: Int): Result<List<Playlist>> = recommendedPlaylistsResult
 
-    override suspend fun getSongDetail(songId: Int): Result<Song> = notStubbed()
+    // --- Charts / follow ---
+
+    var genresResult: Result<List<Genre>> = notStubbed()
+
+    /** (slug, period, offset, limit) -> page. */
+    var onChartPage: (suspend (String, ChartPeriod, Int, Int) -> Result<Page<Song>>)? = null
+
+    /** username -> pages of the users they follow. */
+    var following: (suspend (String, Int, Int) -> Result<Page<Artist>>)? = null
+
+    /** (username, follow) -> result; default success. */
+    var onFollow: suspend (String, Boolean) -> Result<Unit> = { _, _ -> Result.success(Unit) }
+
+    override suspend fun getGenres(): Result<List<Genre>> = genresResult.also { calls += "getGenres" }
+
+    override suspend fun getChart(genreSlug: String, period: ChartPeriod, offset: Int, limit: Int): Result<Page<Song>> {
+        record("getChart($genreSlug, ${period.pathSegment}", offset)
+        return onChartPage?.invoke(genreSlug, period, offset, limit) ?: notStubbed()
+    }
+
+    override suspend fun getFollowing(username: String, limit: Int, offset: Int): Result<Page<Artist>> {
+        record("getFollowing($username", offset)
+        return following?.invoke(username, offset, limit) ?: notStubbed()
+    }
+
+    override suspend fun followArtist(username: String): Result<Unit> {
+        calls += "followArtist($username)"
+        return onFollow(username, true)
+    }
+
+    override suspend fun unfollowArtist(username: String): Result<Unit> {
+        calls += "unfollowArtist($username)"
+        return onFollow(username, false)
+    }
+
+    /** songId -> detail; default "not stubbed". */
+    var onSongDetail: suspend (Int) -> Result<Song> = { notStubbed() }
+
+    /** (songId, like) -> result; default success. */
+    var onLike: suspend (Int, Boolean) -> Result<Unit> = { _, _ -> Result.success(Unit) }
+
+    override suspend fun getSongDetail(songId: Int): Result<Song> {
+        calls += "getSongDetail($songId)"
+        return onSongDetail(songId)
+    }
+
     override suspend fun getStreamUrl(songId: Int): Result<PlayableStream> = notStubbed()
-    override suspend fun likeSong(songId: Int): Result<Unit> = notStubbed()
-    override suspend fun unlikeSong(songId: Int): Result<Unit> = notStubbed()
+
+    override suspend fun likeSong(songId: Int): Result<Unit> {
+        calls += "likeSong($songId)"
+        return onLike(songId, true)
+    }
+
+    override suspend fun unlikeSong(songId: Int): Result<Unit> {
+        calls += "unlikeSong($songId)"
+        return onLike(songId, false)
+    }
 
     private fun <T> notStubbed(): Result<T> = Result.failure(IllegalStateException("not stubbed"))
 }

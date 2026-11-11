@@ -30,6 +30,9 @@ interface PlaybackEngine {
     /** Duration in ms, or <= 0 when unknown. */
     val duration: Long
 
+    /** Player volume (0..1); the sleep timer fades it out and restores it. */
+    var volume: Float
+
     fun setListener(listener: Listener)
 
     /** Replaces the media with [url] for [song], starting at [startPositionMs], and prepares it. */
@@ -109,6 +112,11 @@ class ExoPlaybackEngine(
     override val playbackState get() = player.playbackState
     override val currentPosition get() = player.currentPosition.coerceAtLeast(0)
     override val duration get() = player.duration.let { if (it == C.TIME_UNSET) 0L else it.coerceAtLeast(0) }
+    override var volume: Float
+        get() = player.volume
+        set(value) {
+            player.volume = value.coerceIn(0f, 1f)
+        }
 
     override fun setListener(listener: PlaybackEngine.Listener) {
         this.listener = listener

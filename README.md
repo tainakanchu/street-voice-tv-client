@@ -6,17 +6,32 @@ An unofficial client for listening to [StreetVoice](https://streetvoice.com) mus
 
 ## 功能 Features
 
-- 🔍 **搜尋歌曲與音樂人** — Search songs and artists
-- 🎵 **HLS 串流播放** — HLS streaming playback via Media3 ExoPlayer
-- 📋 **播放佇列與自動下一首** — Queue management with auto-play next
-- 🏠 **首頁推薦** — Home screen with realtime chart, editor's choice, playlists
-- 👤 **音樂人頁面** — Artist page with songs and albums
-- 💿 **專輯與播放清單** — Album and playlist browsing
-- 🔑 **WebView 登入** — Login via WebView (email/password)
-- 🎨 **背景模糊封面** — Blurred album art background on player screen
-- 📺 **遙控器支援** — DPAD remote control + MediaSession for play/pause keys
-- 🔒 **螢幕常亮** — Screen stays on during playback
-- 📊 **播放回報** — Play count reported back to StreetVoice
+### 探索 Discover
+- 🏠 **首頁** — 繼續播放、追蹤音樂人的新歌、最近播放、即時排行、本週排行、曲風、編輯推薦、推薦歌單 / Home with continue listening, new songs from followed artists, recently played, charts, genres and playlists
+- 📊 **排行榜** — 即時 / 週間、8 種曲風分類 / Realtime & weekly charts by category
+- 🔍 **搜尋** — 歌曲、音樂人、歌單、搜尋紀錄、語音搜尋 / Search with history and voice input
+- 👤 **音樂人 / 專輯 / 歌單** — 分頁載入、播放全部 / 隨機播放 / Artist, album and playlist pages with paging and play-all / shuffle
+
+### 播放 Playback
+- 🎵 **HLS 串流播放** — Media3 ExoPlayer, 背景播放 / background playback (MediaSessionService)
+- 📋 **播放佇列** — 下一首播放、加入佇列、移除、自動播放（佇列結束後自動接續）/ Queue editing and autoplay when the queue ends
+- 🎤 **同步歌詞** — LRC 歌詞自動捲動，選擇歌詞行即可跳轉 / Synced LRC lyrics with seek-to-line
+- 🌙 **睡眠計時** — 15 / 30 / 60 / 90 分鐘或本曲結束 / Sleep timer
+- 🖼️ **環境模式** — 閒置時顯示大封面與歌詞（防烙印）/ Ambient mode with burn-in protection
+- 🔁 **隨機 / 重複播放**，設定自動保存 / Shuffle & repeat, persisted
+- ⏯️ **繼續播放** — 保存佇列與播放位置 / Resume the last session
+
+### 帳號 Account
+- 🔑 **WebView 登入** — Login via WebView
+- ❤️ **喜歡歌曲**、**追蹤音樂人**、我的歌單 / Likes, follows and your playlists
+
+### 電視 TV
+- 📺 **遙控器操作** — D-pad、長按選單、媒體鍵 / D-pad navigation, long-press song menu, media keys
+- 🗣️ **Google 助理** — 語音搜尋與「播放…」/ Assistant search and play-from-search
+- ⏭️ **Google TV「繼續觀看」** — Watch Next integration
+- 📱 **QR 碼分享** — 將歌曲分享到手機 / Share the current song via QR code
+- ⚙️ **設定** — 啟動行為、自動播放、環境模式、清除資料、檢查更新 / Settings
+- 🔄 **App 內更新** — 透過 GitHub Releases / In-app updates via GitHub Releases
 
 ## 螢幕截圖 Screenshots
 

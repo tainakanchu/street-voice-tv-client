@@ -97,8 +97,21 @@ class SearchScreenshotTest {
         nowPlaying = FakeData.playbackLong,
     ) { Search(results) }
 
+    @Test
+    fun search_voice_button() = compose.captureTv("search_voice_button") {
+        Search(SearchUiState(), history = listOf("周杰倫", "米津玄師", "落日飛車"), voice = true)
+    }
+
+    @Test
+    fun search_voice_button_focused() = compose.captureTv(
+        "search_voice_button_focused",
+        beforeCapture = { focusOnContentDescription("語音搜尋") },
+    ) {
+        Search(results, voice = true)
+    }
+
     @Composable
-    private fun Search(state: SearchUiState, history: List<String> = emptyList()) {
+    private fun Search(state: SearchUiState, history: List<String> = emptyList(), voice: Boolean = false) {
         SearchContent(
             uiState = state,
             searchHistory = history,
@@ -109,6 +122,7 @@ class SearchScreenshotTest {
             onSongSelected = { _, _ -> },
             onArtistSelected = {},
             onPlaylistSelected = {},
+            onVoiceSearch = if (voice) ({}) else null,
         )
     }
 }

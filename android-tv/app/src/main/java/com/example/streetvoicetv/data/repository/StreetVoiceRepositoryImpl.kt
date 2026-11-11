@@ -4,6 +4,7 @@ import com.example.streetvoicetv.data.api.StreetVoiceApi
 import com.example.streetvoicetv.data.model.AlbumDetailResponse
 import com.example.streetvoicetv.data.model.AlbumResult
 import com.example.streetvoicetv.data.model.AlbumSongResult
+import com.example.streetvoicetv.data.model.FollowingUser
 import com.example.streetvoicetv.data.model.NestedSong
 import com.example.streetvoicetv.data.model.PlaylistDetailResponse
 import com.example.streetvoicetv.data.model.PlaylistResult
@@ -14,6 +15,8 @@ import com.example.streetvoicetv.data.model.UserSearchResult
 import com.example.streetvoicetv.data.model.UserSongResult
 import com.example.streetvoicetv.domain.model.Album
 import com.example.streetvoicetv.domain.model.Artist
+import com.example.streetvoicetv.domain.model.ChartPeriod
+import com.example.streetvoicetv.domain.model.Genre
 import com.example.streetvoicetv.domain.model.Page
 import com.example.streetvoicetv.domain.model.PlayableStream
 import com.example.streetvoicetv.domain.model.Playlist
@@ -150,6 +153,38 @@ class StreetVoiceRepositoryImpl @Inject constructor(
         }
     }
 
+    // --- Charts / genres ---
+
+    override suspend fun getGenres(): Result<List<Genre>> {
+        return runCatchingCancellable {
+            api.getGenres().results.map { Genre(id = it.id, name = it.genre) }
+        }
+    }
+
+    override suspend fun getChart(genreSlug: String, period: ChartPeriod, offset: Int, limit: Int): Result<Page<Song>> {
+        return runCatchingCancellable {
+            api.getChart(period.pathSegment, genreSlug, limit, offset)
+                .let { pageOf(null, offset, it.next, it.results) { r -> r.song.toDomain() } }
+        }
+    }
+
+    // --- Follow ---
+
+    override suspend fun getFollowing(username: String, limit: Int, offset: Int): Result<Page<Artist>> {
+        return runCatchingCancellable {
+            api.getUserFollowing(username, limit, offset)
+                .let { pageOf(it.count, offset, it.next, it.results) { r -> r.toUser.toDomain() } }
+        }
+    }
+
+    override suspend fun followArtist(username: String): Result<Unit> {
+        return runCatchingCancellable { api.followUser(username) }
+    }
+
+    override suspend fun unfollowArtist(username: String): Result<Unit> {
+        return runCatchingCancellable { api.unfollowUser(username) }
+    }
+
     override suspend fun getPlaylistSongs(playlistId: Int, limit: Int, offset: Int): Result<Page<Song>> {
         return runCatchingCancellable {
             api.getPlaylistSongs(playlistId, limit, offset)
@@ -209,6 +244,7 @@ internal fun SongDetailResponse.toDomain(): Song = Song(
     genre = genre,
     synopsis = synopsis,
     lyrics = lyrics,
+    lyricsIsLrc = lyricsIsLrc,
     likesCount = likesCount,
     commentsCount = commentsCount,
     shareCount = shareCount,
@@ -232,26 +268,42 @@ private fun UserSearchResult.toDomain(): Artist = Artist(
     songsCount = songsCount,
 )
 
-private fun UserDetailResponse.toDomain(): Artist = Artist(
+internal fun UserDetailResponse.toDomain(): Artist = Artist(
     id = id,
     username = username,
-    displayName = nickname ?: username,
-    profileImageUrl = profileImage,
-    coverImageUrl = coverImage,
-    introduction = introduction,
-    followersCount = followersCount,
-    followingCount = followingCount,
-    songsCount = songsCount,
+    displayName = nickname?.takeIf { it.isNotBlank() } ?: profile?.nickname?.takeIf { it.isNotBlank() } ?: username,
+    profileImageUrl = profileImage ?: profile?.image,
+    coverImageUrl = coverImage ?: profile?.coverImage,
+    introduction = introduction ?: profile?.introduction,
+    followersCount = followersCount ?: profile?.followerCount ?: 0,
+    followingCount = followingCount ?: profile?.followingCount ?: 0,
+    songsCount = songsCount ?: profile?.songsCount ?: 0,
+    isFollowing = profile?.isFollow,
+)
+
+private fun FollowingUser.toDomain(): Artist = Artist(
+    id = id,
+    username = username,
+    displayName = profile?.nickname?.takeIf { it.isNotBlank() } ?: username,
+    profileImageUrl = profile?.image,
+    coverImageUrl = null,
+    introduction = null,
+    followersCount = 0,
+    followingCount = 0,
+    songsCount = 0,
+    isFollowing = profile?.isFollow,
 )
 
 private fun UserSongResult.toDomain(): Song = Song(
     id = id,
     name = name,
-    artistName = user.nickname ?: user.username,
+    artistName = user.displayName,
     artistUsername = user.username,
     imageUrl = image,
     durationSeconds = length,
     playsCount = playsCount,
+    genre = genre,
+    publishAt = publishAt,
 )
 
 private fun AlbumSongResult.toDomain(): Song = Song(
@@ -292,6 +344,8 @@ private fun NestedSong.toDomain(): Song = Song(
     imageUrl = image,
     durationSeconds = length,
     playsCount = playsCount,
+    genre = genre,
+    publishAt = publishAt,
 )
 
 private fun PlaylistDetailResponse.toDomain(): Playlist = Playlist(

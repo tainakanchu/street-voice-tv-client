@@ -4,6 +4,11 @@ import android.app.Application
 import androidx.compose.ui.test.junit4.createComposeRule
 import com.example.streetvoicetv.ui.home.HomeContent
 import com.example.streetvoicetv.ui.home.HomeUiState
+import com.example.streetvoicetv.ui.home.FollowedNewSongs
+import com.example.streetvoicetv.ui.home.RecentSong
+import com.example.streetvoicetv.ui.home.ContinueListening
+import com.example.streetvoicetv.domain.model.ChartCategory
+import com.example.streetvoicetv.domain.model.ChartPeriod
 import com.example.streetvoicetv.ui.common.UserMessages
 import org.junit.Before
 import org.junit.Rule
@@ -114,6 +119,81 @@ class HomeScreenshotTest {
             ),
             isLoggedIn = true,
         )
+    }
+
+    private val followedNew = FollowedNewSongs(
+        owner = "me",
+        songs = FakeData.songs.mapIndexed { i, song ->
+            RecentSong(song.copy(id = song.id + 500), listOf("剛剛", "5 小時前", "3 天前", "2026/6/11", null)[i % 5])
+        },
+    )
+    private val discoveryState = defaultState.copy(
+        genres = ChartCategory.forPeriod(ChartPeriod.Realtime),
+        weeklySongs = FakeData.songs.reversed().map { it.copy(id = it.id + 900) },
+        followedNew = followedNew,
+        myPlaylists = FakeData.playlists.take(3),
+    )
+
+    @Test
+    fun home_discovery_rows() = compose.captureTv("home_discovery_rows") {
+        Home(discoveryState, isLoggedIn = true)
+    }
+
+    @Test
+    fun home_followed_error() = compose.captureTv("home_followed_error") {
+        Home(
+            discoveryState.copy(followedNew = FollowedNewSongs("me", emptyList(), error = UserMessages.NETWORK)),
+            isLoggedIn = true,
+        )
+    }
+
+    @Test
+    fun home_discovery_long_titles() = compose.captureTv("home_discovery_long_titles") {
+        Home(
+            HomeUiState(
+                chartSongs = FakeData.longSongs,
+                genres = ChartCategory.forPeriod(ChartPeriod.Realtime),
+                weeklySongs = FakeData.longSongs.reversed(),
+                followedNew = FollowedNewSongs("me", FakeData.longSongs.map { RecentSong(it, "12 分鐘前") }),
+                playlists = FakeData.longPlaylists,
+            ),
+            isLoggedIn = true,
+        )
+    }
+
+    private val continueState = HomeUiState(
+        continueListening = ContinueListening(FakeData.songs[2], positionMs = 95_000, queueSize = 24),
+        recentlyPlayed = FakeData.songs.mapIndexed { i, song ->
+            RecentSong(song.copy(id = song.id + 700), listOf("剛剛", "5 分鐘前", "42 分鐘前", "3 小時前", "2 天前")[i % 5])
+        },
+        followedNew = followedNew,
+        chartSongs = FakeData.songs,
+        playlists = FakeData.playlists,
+    )
+
+    @Test
+    fun home_continue_recent() = compose.captureTv("home_continue_recent") {
+        Home(continueState, isLoggedIn = true)
+    }
+
+    @Test
+    fun home_continue_recent_long_titles() = compose.captureTv("home_continue_recent_long_titles") {
+        Home(
+            HomeUiState(
+                continueListening = ContinueListening(FakeData.longSongs[0], positionMs = 3_000_000, queueSize = 1_234),
+                recentlyPlayed = FakeData.longSongs.map { RecentSong(it.copy(id = it.id + 700), "59 分鐘前") },
+                chartSongs = FakeData.longSongs,
+                playlists = FakeData.longPlaylists,
+            ),
+        )
+    }
+
+    @Test
+    fun home_continue_unfocused() = compose.captureTv(
+        "home_continue_unfocused",
+        beforeCapture = { focusOnText("搜尋歌曲與音樂人") },
+    ) {
+        Home(continueState.copy(followedNew = null))
     }
 
     @androidx.compose.runtime.Composable

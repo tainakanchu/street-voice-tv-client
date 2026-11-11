@@ -27,11 +27,13 @@ data class NestedSong(
     val length: Double = 0.0,
     val user: NestedUser,
     @SerialName("plays_count") val playsCount: Int = 0,
+    val genre: Int? = null,
+    @SerialName("publish_at") val publishAt: String? = null,
 )
 
 // --- Chart ---
 
-/** GET /api/v5/chart/realtime/{style}/ */
+/** GET /api/v5/chart/{realtime|weekly}/{style}/ (at most 50 entries, no `count`) */
 @Serializable
 data class ChartResponse(
     val offset: Int = 0,

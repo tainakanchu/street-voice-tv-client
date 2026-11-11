@@ -14,6 +14,15 @@
         android:name="android.software.leanback"
         android:required="true" />
 
+    <!-- Google TV home 「繼續觀看」 (Watch Next) programs live in the system TV provider. -->
+    <queries>
+        <provider android:authorities="android.media.tv" />
+        <!-- Speech recognizer of the search screen's mic button (package visibility, Android 11+). -->
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
+    </queries>
+
     <!-- TV apps don't require touch screen -->
     <uses-feature
         android:name="android.hardware.touchscreen"
@@ -44,13 +53,35 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:configChanges="keyboard|keyboardHidden|navigation">
+            android:configChanges="keyboard|keyboardHidden|navigation"
+            android:launchMode="singleTop">
 
             <!-- Leanback launcher intent filter -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
+
+            <!-- Watch Next deep link: resume the last session in the player. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="streetvoicetv" android:host="resume" />
+            </intent-filter>
+
+            <!-- Voice / Assistant search: open the search screen with the query. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEARCH" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="com.google.android.gms.actions.SEARCH_ACTION" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.app.searchable"
+                android:resource="@xml/searchable" />
         </activity>
 
         <service

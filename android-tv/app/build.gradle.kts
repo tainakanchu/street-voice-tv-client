@@ -129,6 +129,10 @@ dependencies {
     implementation(libs.activity.compose)
     implementation(libs.core.ktx)
 
+    // Google TV home (Watch Next) and QR share
+    implementation(libs.tvprovider)
+    implementation(libs.zxing.core)
+
     // Lifecycle
     implementation(libs.lifecycle.runtime.ktx)
     implementation(libs.lifecycle.runtime.compose)

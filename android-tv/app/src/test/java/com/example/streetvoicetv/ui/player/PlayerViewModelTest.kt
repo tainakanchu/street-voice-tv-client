@@ -2,6 +2,8 @@ package com.example.streetvoicetv.ui.player
 
 import android.app.Application
 import androidx.lifecycle.SavedStateHandle
+import com.example.streetvoicetv.ui.settings.SettingsRepository
+import com.example.streetvoicetv.ui.settings.SettingsStorage
 import androidx.media3.common.PlaybackException
 import org.robolectric.RuntimeEnvironment
 import com.example.streetvoicetv.data.auth.SessionManager
@@ -73,7 +75,13 @@ class PlayerViewModelTest {
     private fun runCurrent() = dispatcher.scheduler.runCurrent()
 
     private fun viewModel(songId: Int) =
-        PlayerViewModel(repo, h.manager, session, SavedStateHandle(mapOf("songId" to songId)))
+        PlayerViewModel(
+            repo,
+            h.manager,
+            session,
+            SavedStateHandle(mapOf("songId" to songId)),
+            SettingsRepository(SettingsStorage.InMemory()),
+        )
 
     private fun queueAndOpen(songs: List<Song>, index: Int): PlayerViewModel {
         h.manager.setQueue(songs, index) // as MainActivity.playSongInList does
@@ -190,5 +198,25 @@ class PlayerViewModelTest {
         assertEquals(7, h.manager.state.value.song?.id)
         assertEquals(1, h.manager.state.value.queueSize)
         assertEquals("detail fetched once", listOf(7), repo.detailCalls)
+    }
+
+    @Test
+    fun `sleep timer, queue removal, autoplay and seekTo go to the manager`() {
+        val vm = queueAndOpen(testSongs(4), 0)
+        vm.setSleepTimer(com.example.streetvoicetv.playback.SleepTimerOption.END_OF_SONG)
+        assertEquals(com.example.streetvoicetv.playback.SleepTimerState.EndOfSong, vm.sleepTimer.value)
+        vm.setSleepTimer(com.example.streetvoicetv.playback.SleepTimerOption.OFF)
+        assertEquals(com.example.streetvoicetv.playback.SleepTimerState.Off, vm.sleepTimer.value)
+
+        vm.removeFromQueue(2)
+        assertEquals(listOf(1, 2, 4), vm.upNext.value.items.map { it.song.id })
+
+        val before = h.manager.autoplayEnabled.value
+        vm.toggleAutoplay()
+        assertEquals(!before, h.manager.autoplayEnabled.value)
+        assertEquals(!before, vm.upNext.value.autoplayEnabled)
+
+        vm.seekTo(42_000)
+        assertEquals(42_000L, vm.positionMs.value)
     }
 }
