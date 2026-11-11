@@ -117,6 +117,48 @@ private fun TvComposeRule.sendKey(keyCode: Int) {
     waitForIdle()
 }
 
+/**
+ * Holds [key] down like a remote does for a long press: the initial key down, auto-repeat key
+ * downs (the first one flagged FLAG_LONG_PRESS, as Android does after the long-press timeout)
+ * and finally the key up. Asserts focus is kept (unless [allowFocusLoss]).
+ */
+fun TvComposeRule.longPress(key: Dpad = Dpad.Center, repeats: Int = 3, allowFocusLoss: Boolean = false) {
+    val before = describeFocus()
+    runOnUiThread {
+        val down = SystemClock.uptimeMillis()
+        fun send(action: Int, repeat: Int, flags: Int) {
+            val event = KeyEvent(down, down + repeat * 50L, action, key.keyCode, repeat, 0, REMOTE_DEVICE_ID, 0, flags, InputDevice.SOURCE_DPAD)
+            shadowOf(event).setDevice(Remote)
+            activity.dispatchKeyEvent(event)
+        }
+        send(KeyEvent.ACTION_DOWN, 0, 0)
+        for (r in 1..repeats) send(KeyEvent.ACTION_DOWN, r, if (r == 1) KeyEvent.FLAG_LONG_PRESS else 0)
+        send(KeyEvent.ACTION_UP, 0, 0)
+    }
+    waitForIdle()
+    if (!allowFocusLoss && focusedNodeOrNull() == null) fail("Focus lost after long-pressing $key; focus before was: $before")
+}
+
+/**
+ * Like [longPress], but the menu (or whatever the long press opens) gets a frame to take focus
+ * before the key up, as on a device where the up comes much later than the first repeat.
+ */
+fun TvComposeRule.longPressSlowRelease(key: Dpad = Dpad.Center) {
+    val down = SystemClock.uptimeMillis()
+    fun send(action: Int, repeat: Int, flags: Int) = runOnUiThread {
+        val event = KeyEvent(down, down + repeat * 50L, action, key.keyCode, repeat, 0, REMOTE_DEVICE_ID, 0, flags, InputDevice.SOURCE_DPAD)
+        shadowOf(event).setDevice(Remote)
+        activity.dispatchKeyEvent(event)
+    }
+    send(KeyEvent.ACTION_DOWN, 0, 0)
+    send(KeyEvent.ACTION_DOWN, 1, KeyEvent.FLAG_LONG_PRESS)
+    waitForIdle()
+    send(KeyEvent.ACTION_DOWN, 2, 0)
+    waitForIdle()
+    send(KeyEvent.ACTION_UP, 0, 0)
+    waitForIdle()
+}
+
 fun TvComposeRule.focusedNodeOrNull(): SemanticsNode? =
     onAllNodes(isFocused()).fetchSemanticsNodes().firstOrNull()
 

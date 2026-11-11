@@ -116,13 +116,15 @@ fun FocusRequester.tryRequestFocus(): Boolean =
  * Requests focus once the target is attached and ready. Items of lazy lists are
  * composed during layout, i.e. possibly after a LaunchedEffect of the parent
  * starts, so this retries for a few frames. Never throws (e.g. empty lists).
+ * Returns whether focus was requested successfully.
  */
-suspend fun FocusRequester.requestFocusWhenReady(maxFrames: Int = 10) {
+suspend fun FocusRequester.requestFocusWhenReady(maxFrames: Int = 10): Boolean {
     repeat(maxFrames) {
         // Wait one frame first: tv-material components observe focus through an
         // InteractionSource collected in their own effects. Focusing before those
         // collectors run would leave the element focused but drawn unfocused.
         withFrameNanos { }
-        if (tryRequestFocus()) return
+        if (tryRequestFocus()) return true
     }
+    return false
 }

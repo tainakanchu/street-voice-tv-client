@@ -1,6 +1,7 @@
 package com.example.streetvoicetv.ui.search
 
 import com.example.streetvoicetv.ui.common.UserMessages
+import androidx.lifecycle.SavedStateHandle
 import android.app.Application
 import com.example.streetvoicetv.data.SearchHistoryManager
 import com.example.streetvoicetv.domain.model.Page
@@ -134,5 +135,43 @@ class SearchViewModelTest {
         assertEquals(first, state.songs)
         assertFalse(state.songsLoadMore.isLoadingMore)
         assertEquals(2, state.resultsGeneration)
+    }
+
+    // --- search?q= (voice / assistant search) and voice results ---
+
+    private fun stubAll() {
+        repository.searchSongsResult = Result.success(listOf(song))
+        repository.searchArtistsResult = Result.success(emptyList())
+        repository.searchPlaylistsResult = Result.success(emptyList())
+    }
+
+    @Test
+    fun `a query argument fills the field and searches once`() {
+        stubAll()
+        val handle = SavedStateHandle(mapOf(SearchViewModel.ARG_QUERY to " 稻香 "))
+        val routed = SearchViewModel(repository, history, handle)
+        assertEquals("稻香", routed.uiState.value.query)
+        assertEquals(listOf(song), routed.uiState.value.songs)
+        assertEquals(1, repository.calls.count { it.startsWith("searchSongs") })
+
+        // Recreated with the same saved state (configuration change / process restore): not again.
+        SearchViewModel(repository, history, handle)
+        assertEquals(1, repository.calls.count { it.startsWith("searchSongs") })
+    }
+
+    @Test
+    fun `no query argument - nothing is searched`() {
+        SearchViewModel(repository, history, SavedStateHandle())
+        SearchViewModel(repository, history, SavedStateHandle(mapOf(SearchViewModel.ARG_QUERY to "  ")))
+        assertTrue(repository.calls.isEmpty())
+    }
+
+    @Test
+    fun `a voice result fills the field and searches`() {
+        stubAll()
+        vm.onVoiceResult("稻香")
+        assertEquals("稻香", vm.uiState.value.query)
+        assertEquals(listOf(song), vm.uiState.value.songs)
+        assertEquals(listOf("稻香"), history.history.value)
     }
 }

@@ -244,6 +244,7 @@ internal fun SongDetailResponse.toDomain(): Song = Song(
     genre = genre,
     synopsis = synopsis,
     lyrics = lyrics,
+    lyricsIsLrc = lyricsIsLrc,
     likesCount = likesCount,
     commentsCount = commentsCount,
     shareCount = shareCount,

@@ -1,5 +1,6 @@
 package com.example.streetvoicetv.ui.search
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.streetvoicetv.data.SearchHistoryManager
@@ -26,6 +27,7 @@ import javax.inject.Inject
 class SearchViewModel @Inject constructor(
     private val repository: StreetVoiceRepository,
     private val searchHistoryManager: SearchHistoryManager,
+    private val savedStateHandle: SavedStateHandle = SavedStateHandle(),
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SearchUiState())
@@ -47,12 +49,27 @@ class SearchViewModel @Inject constructor(
     )
     private var searchJob: Job? = null
 
+    init {
+        // `search?q=…` (voice / assistant search): fill the field and search once. Not again
+        // after a configuration change or process restore (the results are restored instead).
+        val initialQuery = savedStateHandle.get<String>(ARG_QUERY)
+        if (!initialQuery.isNullOrBlank() && savedStateHandle.get<Boolean>(KEY_QUERY_HANDLED) != true) {
+            savedStateHandle[KEY_QUERY_HANDLED] = true
+            submitQuery(initialQuery)
+        }
+    }
+
     fun onQueryChange(query: String) {
         _uiState.update { it.copy(query = query) }
     }
 
-    fun selectHistory(query: String) {
-        _uiState.update { it.copy(query = query) }
+    fun selectHistory(query: String) = submitQuery(query)
+
+    /** A recognised voice query: fills the field and searches. */
+    fun onVoiceResult(query: String) = submitQuery(query)
+
+    private fun submitQuery(query: String) {
+        _uiState.update { it.copy(query = query.trim()) }
         search()
     }
 
@@ -110,10 +127,13 @@ class SearchViewModel @Inject constructor(
 
     private fun <T> Result<Page<T>>.itemsOrEmpty(): List<T> = getOrNull()?.items ?: emptyList()
 
-    private companion object {
-        const val TAG = "SearchViewModel"
-        const val SONGS_PAGE_SIZE = 20
-        const val SECTION_LIMIT = 5
+    companion object {
+        /** Navigation argument: a query to search for right away. */
+        const val ARG_QUERY = "q"
+        private const val KEY_QUERY_HANDLED = "q_handled"
+        private const val TAG = "SearchViewModel"
+        private const val SONGS_PAGE_SIZE = 20
+        private const val SECTION_LIMIT = 5
     }
 }
 

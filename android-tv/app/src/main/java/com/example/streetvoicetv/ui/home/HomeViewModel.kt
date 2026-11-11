@@ -14,6 +14,11 @@ import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.domain.model.formatReleaseAge
 import com.example.streetvoicetv.domain.model.parsePublishAt
 import com.example.streetvoicetv.domain.repository.StreetVoiceRepository
+import com.example.streetvoicetv.playback.PlaybackManager
+import com.example.streetvoicetv.playback.RecentlyPlayedEntry
+import com.example.streetvoicetv.playback.RestorableSession
+import com.example.streetvoicetv.ui.common.PlaybackActions
+import com.example.streetvoicetv.ui.common.PlaybackManagerActions
 import com.example.streetvoicetv.ui.common.userMessageFor
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -26,11 +31,22 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
-class HomeViewModel @Inject constructor(
+class HomeViewModel internal constructor(
     private val repository: StreetVoiceRepository,
     private val sessionManager: SessionManager,
     private val followedSongsRepository: FollowedSongsRepository,
+    private val playback: PlaybackActions = PlaybackActions.None,
+    /** Epoch ms (for 「N 分鐘前」 of 最近播放). */
+    private val clock: () -> Long = System::currentTimeMillis,
 ) : ViewModel() {
+
+    @Inject
+    constructor(
+        repository: StreetVoiceRepository,
+        sessionManager: SessionManager,
+        followedSongsRepository: FollowedSongsRepository,
+        playbackManager: PlaybackManager,
+    ) : this(repository, sessionManager, followedSongsRepository, PlaybackManagerActions(playbackManager))
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
@@ -50,6 +66,36 @@ class HomeViewModel @Inject constructor(
             // username becomes available (e.g. fetched after login), and loads initially.
             sessionManager.session.collect { session -> load(session) }
         }
+        // 繼續播放 / 最近播放 are local (saved by the PlaybackManager, loaded asynchronously).
+        viewModelScope.launch {
+            playback.restorable.collect { session ->
+                _uiState.update { it.copy(continueListening = session?.toContinueListening()) }
+            }
+        }
+        viewModelScope.launch {
+            playback.recentlyPlayedEntries.collect { entries ->
+                _uiState.update { it.copy(recentlyPlayed = entries.toRecentSongs()) }
+            }
+        }
+    }
+
+    private fun RestorableSession.toContinueListening(): ContinueListening? {
+        if (songs.isEmpty()) return null
+        return ContinueListening(song = currentSong, positionMs = positionMs, queueSize = songs.size)
+    }
+
+    private fun List<RecentlyPlayedEntry>.toRecentSongs(): List<RecentSong> {
+        val now = clock()
+        return take(RECENTLY_PLAYED_COUNT).map { RecentSong(it.song, formatReleaseAge(it.playedAtMs, now)) }
+    }
+
+    /**
+     * 繼續播放: restores the saved session and starts playing it. Returns the id of the song
+     * that is now loaded (to open the player), or null when there was nothing to resume.
+     */
+    fun resumeLastSession(): Int? {
+        val songId = playback.restorable.value?.currentSong?.id ?: return null
+        return if (playback.resumeLastSession(play = true)) songId else null
     }
 
     private fun load(session: SessionState = sessionManager.session.value) {
@@ -200,6 +246,8 @@ class HomeViewModel @Inject constructor(
      * its cache is stale (older than 10 minutes, or a follow changed meanwhile).
      */
     fun onResume() {
+        // 「N 分鐘前」 of 最近播放 moves on while Home is not visible.
+        _uiState.update { it.copy(recentlyPlayed = playback.recentlyPlayedEntries.value.toRecentSongs()) }
         if (followedJob?.isActive == true) return
         val session = sessionManager.session.value
         if (!session.isLoggedIn || session.username == null) return
@@ -209,10 +257,14 @@ class HomeViewModel @Inject constructor(
     private companion object {
         const val TAG = "HomeViewModel"
         const val WEEKLY_COUNT = 20
+        const val RECENTLY_PLAYED_COUNT = 20
     }
 }
 
-/** A song of 「追蹤音樂人的新歌」 with its release age (「3 天前」), if the API gave a date. */
+/**
+ * A song of a Home row with a time label: the release age of 「追蹤音樂人的新歌」 (「3 天前」, if
+ * the API gave a date) or when it was played for 「最近播放」 (「5 分鐘前」).
+ */
 data class RecentSong(
     val song: Song,
     val ageLabel: String?,
@@ -230,6 +282,21 @@ data class FollowedNewSongs(
     val queue: List<Song> = songs.map { it.song }
 }
 
+/** The 「繼續播放」 card: the saved session's current song, where it stopped, and the queue size. */
+data class ContinueListening(
+    val song: Song,
+    val positionMs: Long,
+    val queueSize: Int,
+) {
+    /** Progress through the song (0..1); 0 when the duration is unknown. */
+    val progress: Float
+        get() {
+            val durationMs = song.durationSeconds * 1000
+            if (durationMs.isNaN() || durationMs <= 0) return 0f
+            return (positionMs / durationMs).toFloat().coerceIn(0f, 1f)
+        }
+}
+
 data class HomeUiState(
     val isLoading: Boolean = false,
     val chartSongs: List<Song> = emptyList(),
@@ -242,5 +309,12 @@ data class HomeUiState(
     val weeklySongs: List<Song> = emptyList(),
     /** 「追蹤音樂人的新歌」 (null: no row — logged out, nobody followed, or not loaded yet). */
     val followedNew: FollowedNewSongs? = null,
+    /** 「繼續播放」 (null: nothing saved, or a queue is already loaded). */
+    val continueListening: ContinueListening? = null,
+    /** 「最近播放」, most recent first (empty: no row). */
+    val recentlyPlayed: List<RecentSong> = emptyList(),
     val error: String? = null,
-)
+) {
+    /** The queue of a 最近播放 card: the row as shown. */
+    val recentlyPlayedQueue: List<Song> = recentlyPlayed.map { it.song }
+}
