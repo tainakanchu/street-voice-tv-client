@@ -228,7 +228,12 @@ fun ArtistContent(
 
                         if (!uiState.follow.isSelf) {
                             Spacer(modifier = Modifier.width(20.dp))
-                            FollowButton(follow = uiState.follow, onClick = onToggleFollow)
+                            FollowButton(
+                                follow = uiState.follow,
+                                onClick = onToggleFollow,
+                                // Down: the selected tab (the full-width list would win otherwise).
+                                modifier = Modifier.focusProperties { down = tabFocus[selectedIndex] },
+                            )
                         }
                     }
                 }
@@ -342,8 +347,8 @@ const val ARTIST_FOLLOW_BUTTON_TAG = "artist_follow_button"
 /** 追蹤 (filled) / 追蹤中 (outlined). Stays focusable while a request runs (presses are ignored). */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun FollowButton(follow: FollowUiState, onClick: () -> Unit) {
-    val modifier = Modifier.testTag(ARTIST_FOLLOW_BUTTON_TAG)
+private fun FollowButton(follow: FollowUiState, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val buttonModifier = modifier.testTag(ARTIST_FOLLOW_BUTTON_TAG)
     val content: @Composable () -> Unit = {
         if (follow.inFlight) {
             CircularProgressIndicator(
@@ -372,7 +377,7 @@ private fun FollowButton(follow: FollowUiState, onClick: () -> Unit) {
     }
     Button(
         onClick = onClick,
-        modifier = modifier,
+        modifier = buttonModifier,
         colors = colors,
         contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
     ) {

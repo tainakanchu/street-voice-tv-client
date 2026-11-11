@@ -93,7 +93,7 @@ fun ChartContent(
     val periods = ChartPeriod.entries
     val selectedPeriodIndex = periods.indexOf(uiState.period)
     val tabFocus = remember { periods.map { FocusRequester() } }
-    val chipFocus = remember { ChartCategory.ALL.associate { it.slug to FocusRequester() } }
+    val playAllFocus = remember { FocusRequester() }
     val listState = rememberLazyListState()
     LoadMoreEffect(listState, uiState.loadMore, onLoadMore)
 
@@ -150,8 +150,8 @@ fun ChartContent(
             LazyRow(
                 modifier = Modifier
                     .testTag(CHART_GENRES_TAG)
-                    // Back into the row: the chip focused last, else the selected one.
-                    .focusRestorer(chipFocus.getValue(uiState.category.slug)),
+                    // Back into the row: the chip focused last.
+                    .focusRestorer(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(vertical = 8.dp),
             ) {
@@ -159,7 +159,6 @@ fun ChartContent(
                     FilterChip(
                         selected = category == uiState.category,
                         onClick = { onSelectCategory(category) },
-                        modifier = Modifier.focusRequester(chipFocus.getValue(category.slug)),
                     ) {
                         Text(category.label)
                     }
@@ -216,7 +215,9 @@ fun ChartContent(
                     PlayAllButtons(
                         pending = uiState.playAllPending,
                         onPlayAll = onPlayAll,
-                        modifier = Modifier.padding(vertical = 8.dp),
+                        modifier = Modifier
+                            .padding(vertical = 8.dp)
+                            .focusRequester(playAllFocus),
                     )
                 }
                 itemsIndexed(uiState.songs, key = { _, it -> "song_${it.id}" }) { index, song ->
@@ -225,6 +226,9 @@ fun ChartContent(
                         rank = index + 1,
                         onClick = { onSongSelected(song, uiState.songs) },
                         modifier = Modifier
+                            // Up from the first song: the play buttons (the wide chip row
+                            // above would otherwise win the geometric search).
+                            .then(if (index == 0) Modifier.focusProperties { up = playAllFocus } else Modifier)
                             .initialFocus(firstItemFocus, enabled = index == 0)
                             .holdFocusWhileLoadingMore(index == uiState.songs.lastIndex, uiState.loadMore),
                     )

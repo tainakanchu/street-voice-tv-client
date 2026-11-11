@@ -57,6 +57,9 @@ class FakeStreetVoiceRepository : StreetVoiceRepository {
     var onArtistPlaylists: (suspend (String) -> Result<List<Playlist>>)? = null
     var onChart: (suspend () -> Result<List<Song>>)? = null
 
+    /** Artist songs by username (first page); replaces [artistSongs] / [artistSongsResult] when set. */
+    var onArtistSongs: (suspend (String) -> Result<List<Song>>)? = null
+
     var searchSongs: FakePages<Song>? = null
     var albumSongs: FakePages<Song>? = null
     var artistSongs: FakePages<Song>? = null
@@ -106,6 +109,7 @@ class FakeStreetVoiceRepository : StreetVoiceRepository {
 
     override suspend fun getArtistSongs(username: String, limit: Int, offset: Int): Result<Page<Song>> {
         record("getArtistSongs($username", offset)
+        onArtistSongs?.let { hook -> return hook(username).map { Page(it, it.size, null) } }
         return paged(artistSongs, offset, limit) { artistSongsResult }
     }
 

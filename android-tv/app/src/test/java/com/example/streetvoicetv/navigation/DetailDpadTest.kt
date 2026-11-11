@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import com.example.streetvoicetv.domain.model.Song
 import com.example.streetvoicetv.playback.PlaybackState
@@ -15,7 +16,9 @@ import com.example.streetvoicetv.screenshot.TvChrome
 import com.example.streetvoicetv.screenshot.installFakeImageLoader
 import com.example.streetvoicetv.ui.album.AlbumContent
 import com.example.streetvoicetv.ui.album.AlbumUiState
+import com.example.streetvoicetv.ui.artist.ARTIST_FOLLOW_BUTTON_TAG
 import com.example.streetvoicetv.ui.artist.ArtistContent
+import com.example.streetvoicetv.ui.artist.FollowUiState
 import com.example.streetvoicetv.ui.artist.ArtistTab
 import com.example.streetvoicetv.ui.artist.ArtistUiState
 import com.example.streetvoicetv.ui.components.NOW_PLAYING_BAR_TAG
@@ -114,6 +117,8 @@ class DetailDpadTest {
 
     private var artistState by mutableStateOf(ArtistUiState())
     private val selectedTabs = mutableListOf<ArtistTab>()
+    private val openedArtists = mutableListOf<String>()
+    private var followToggles = 0
 
     private fun setArtist(state: ArtistUiState) {
         artistState = state
@@ -128,6 +133,11 @@ class DetailDpadTest {
                     selectedTabs += it
                     artistState = artistState.copy(selectedTab = it)
                 },
+                onArtistSelected = { openedArtists += it.username },
+                onToggleFollow = {
+                    followToggles++
+                    artistState = artistState.copy(follow = artistState.follow.copy(isFollowing = !artistState.follow.isFollowing))
+                },
             )
         }
     }
@@ -135,6 +145,7 @@ class DetailDpadTest {
     private val artist = FakeData.artist(0)
     private val songsTab get() = hasText("歌曲 (", substring = true)
     private val albumsTab get() = hasText("專輯 (", substring = true)
+    private val followingTab get() = hasText("追蹤中 (", substring = true)
 
     @Test
     fun artist_tabsReachable_switchingKeepsFocus() {
@@ -191,9 +202,48 @@ class DetailDpadTest {
 
     @Test
     fun artist_bothTabsEmpty_tabsKeepFocus() {
-        setArtist(ArtistUiState(artist = artist))
+        setArtist(ArtistUiState(artist = artist, follow = FollowUiState(isSelf = true)))
         compose.assertFocused(songsTab)
         compose.dpad(Dpad.Right, Dpad.Down, Dpad.Up, Dpad.Left, Dpad.Up)
         compose.assertFocused(songsTab)
+    }
+
+    @Test
+    fun artist_followButton_reachableAboveTabs_togglesInPlace() {
+        setArtist(
+            ArtistUiState(
+                artist = artist,
+                songs = FakeData.songs,
+                follow = FollowUiState(isLoggedIn = true),
+            ),
+        )
+        compose.assertFocusedText(FakeData.songs[0].name)
+        compose.dpad(Dpad.Up, Dpad.Up, Dpad.Up)
+        compose.assertFocused(hasTestTag(ARTIST_FOLLOW_BUTTON_TAG))
+        compose.assertFocused(hasText("追蹤", substring = true))
+
+        compose.dpad(Dpad.Center)
+        assertEquals(1, followToggles)
+        compose.assertFocused(hasTestTag(ARTIST_FOLLOW_BUTTON_TAG))
+        compose.assertFocused(hasText("追蹤中", substring = true))
+        compose.captureDpad("artist_follow_button_following")
+
+        // Back down: the selected tab, then the list.
+        compose.dpad(Dpad.Down)
+        compose.assertFocused(songsTab)
+    }
+
+    @Test
+    fun artist_followingTab_listsArtists() {
+        setArtist(ArtistUiState(artist = artist, songs = FakeData.songs, following = FakeData.artists))
+        compose.dpad(Dpad.Up, Dpad.Up)
+        compose.assertFocused(songsTab)
+        compose.dpad(Dpad.Right, Dpad.Right)
+        compose.assertFocused(followingTab)
+        assertEquals(ArtistTab.Following, artistState.selectedTab)
+        compose.dpad(Dpad.Down)
+        compose.assertFocusedText(FakeData.artists[0].displayName)
+        compose.dpad(Dpad.Center)
+        assertEquals(listOf(FakeData.artists[0].username), openedArtists)
     }
 }

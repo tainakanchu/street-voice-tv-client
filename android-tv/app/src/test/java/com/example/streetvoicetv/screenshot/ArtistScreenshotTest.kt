@@ -10,7 +10,12 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.requestFocus
+import com.example.streetvoicetv.ui.artist.ARTIST_FOLLOW_BUTTON_TAG
 import com.example.streetvoicetv.ui.artist.ArtistContent
+import com.example.streetvoicetv.ui.artist.FollowUiState
+import com.example.streetvoicetv.ui.common.UserMessages
 import com.example.streetvoicetv.ui.artist.ArtistTab
 import com.example.streetvoicetv.ui.artist.ArtistUiState
 
@@ -87,6 +92,35 @@ class ArtistScreenshotTest {
         "artist_with_now_playing",
         nowPlaying = FakeData.playbackPlaying,
     ) { Artist(default) }
+
+    @Test
+    fun artist_follow_logged_in() = compose.captureTv("artist_follow_logged_in") {
+        Artist(default.copy(follow = FollowUiState(isLoggedIn = true, isFollowing = false)))
+    }
+
+    @Test
+    fun artist_following_focused() = compose.captureTv(
+        "artist_following_focused",
+        beforeCapture = { onNodeWithTag(ARTIST_FOLLOW_BUTTON_TAG).requestFocus() },
+    ) {
+        Artist(default.copy(follow = FollowUiState(isLoggedIn = true, isFollowing = true)))
+    }
+
+    @Test
+    fun artist_follow_error() = compose.captureTv("artist_follow_error") {
+        Artist(default.copy(follow = FollowUiState(isLoggedIn = true, error = UserMessages.FOLLOW_FAILED)))
+    }
+
+    @Test
+    fun artist_following_tab() = compose.captureTv("artist_following_tab") {
+        Artist(
+            default.copy(
+                following = FakeData.artists + FakeData.longArtists.mapIndexed { i, a -> a.copy(username = "long_$i") },
+                selectedTab = ArtistTab.Following,
+                follow = FollowUiState(isLoggedIn = true, isFollowing = true),
+            ),
+        )
+    }
 
     @Composable
     private fun Artist(state: ArtistUiState) {
