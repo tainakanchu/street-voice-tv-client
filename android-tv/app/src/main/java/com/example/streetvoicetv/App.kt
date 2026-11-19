@@ -5,6 +5,7 @@ import android.app.Application
 import android.os.Bundle
 import coil.ImageLoader
 import coil.ImageLoaderFactory
+import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import com.example.streetvoicetv.playback.PlaybackManager
 import com.example.streetvoicetv.tv.WatchNextSync
@@ -56,5 +57,18 @@ class App : Application(), ImageLoaderFactory {
             }
             .allowRgb565(true)
             .memoryCache { MemoryCache.Builder(this).maxSizePercent(0.15).build() }
+            // Bounded explicitly: Coil's default (2% of the disk) is far too much on a TV whose
+            // /data is nearly full (installs fail below the system's low-storage threshold).
+            .diskCache {
+                DiskCache.Builder()
+                    .directory(cacheDir.resolve(IMAGE_CACHE_DIR))
+                    .maxSizeBytes(IMAGE_DISK_CACHE_BYTES)
+                    .build()
+            }
             .build()
+
+    private companion object {
+        const val IMAGE_CACHE_DIR = "image_cache"
+        const val IMAGE_DISK_CACHE_BYTES = 32L * 1024 * 1024
+    }
 }

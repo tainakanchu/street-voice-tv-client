@@ -6,7 +6,10 @@ import com.example.streetvoicetv.data.api.ApiConfig
 import com.example.streetvoicetv.data.api.StreetVoiceApi
 import com.example.streetvoicetv.data.auth.SessionCookieInterceptor
 import com.example.streetvoicetv.data.repository.StreetVoiceRepositoryImpl
+import com.example.streetvoicetv.data.update.CacheReclaimer
 import com.example.streetvoicetv.domain.repository.StreetVoiceRepository
+import coil.annotation.ExperimentalCoilApi
+import coil.imageLoader
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -24,7 +27,7 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object AppModule {
 
-    private const val HTTP_CACHE_SIZE = 20L * 1024 * 1024
+    private const val HTTP_CACHE_SIZE = 10L * 1024 * 1024
 
     @Provides
     @Singleton
@@ -65,6 +68,21 @@ object AppModule {
             .readTimeout(15, TimeUnit.SECONDS)
             .writeTimeout(15, TimeUnit.SECONDS)
             .build()
+    }
+
+    /**
+     * Frees the app's own caches when an update does not fit (the image disk cache and the
+     * HTTP cache can be re-filled later).
+     */
+    @OptIn(ExperimentalCoilApi::class)
+    @Provides
+    @Singleton
+    fun provideCacheReclaimer(
+        @ApplicationContext context: Context,
+        client: OkHttpClient,
+    ): CacheReclaimer = CacheReclaimer {
+        context.imageLoader.diskCache?.clear()
+        client.cache?.evictAll()
     }
 
     @Provides
