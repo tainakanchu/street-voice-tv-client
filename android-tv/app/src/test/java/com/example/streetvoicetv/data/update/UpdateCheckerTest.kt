@@ -1,5 +1,6 @@
 package com.example.streetvoicetv.data.update
 
+import android.app.Activity
 import android.app.Application
 import android.content.Context
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -21,6 +22,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
+import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
@@ -40,6 +42,17 @@ class UpdateCheckerTest {
         .also { it.edit().clear().commit() }
     private var now = 1_000_000_000L
 
+    // Fake /data: 4GB total -> low-storage threshold 200MB.
+    private val totalBytes = 4L * 1024 * 1024 * 1024
+    private var availableBytes = totalBytes / 2
+    private var reclaimCount = 0
+    private var onReclaim: () -> Unit = {}
+    private var storageReader: () -> Long = { availableBytes }
+    private val storageStats = object : StorageStats {
+        override fun read() = StorageStats.Snapshot(storageReader(), totalBytes)
+    }
+    private val threshold = UpdateStorage.lowStorageThreshold(totalBytes)
+
     @Before
     fun setUp() = server.start()
 
@@ -58,6 +71,11 @@ class UpdateCheckerTest {
         releaseUrl = server.url("/releases/latest").toString(),
         dispatcher = dispatcher,
         clock = { now },
+        storageStats = storageStats,
+        cacheReclaimer = CacheReclaimer {
+            reclaimCount++
+            onReclaim()
+        },
     )
 
     private fun releaseJson(tag: String, size: Long) = """
@@ -227,5 +245,141 @@ class UpdateCheckerTest {
         server.takeRequest()
         assertEquals("/app.apk", server.takeRequest().path)
         assertNull(server.takeRequest(10, TimeUnit.MILLISECONDS))
+    }
+
+    // ------------------------------------------------------------------ storage
+
+    @Test
+    fun `required space is the low-storage threshold plus three apk sizes`() {
+        val mb = UpdateStorage.MB
+        assertEquals(200 * mb, UpdateStorage.lowStorageThreshold(4000 * mb))
+        assertEquals(500 * mb, UpdateStorage.lowStorageThreshold(64_000 * mb))
+        assertEquals(200 * mb + 3 * 20 * mb, UpdateStorage.requiredBytes(4000 * mb, 20 * mb, 3))
+        // Unknown size: 10MB assumed.
+        assertEquals(200 * mb + 30 * mb, UpdateStorage.requiredBytes(4000 * mb, 0, 3))
+        assertEquals(0, UpdateStorage.missingBytes(null, 20 * mb, 3))
+        assertEquals(2, UpdateStorage.toMbCeil(mb + 1))
+    }
+
+    @Test
+    fun `insufficient space before download frees caches and becomes InsufficientStorage`() {
+        val apkSize = 20 * UpdateStorage.MB
+        enqueueRelease(size = apkSize)
+        val checker = checker()
+        checker.checkForUpdate()
+        val available = checker.state.value as UpdateState.Available
+        // 128MB free on a 4GB TV: 200MB + 60MB needed.
+        availableBytes = 128 * UpdateStorage.MB
+        checker.downloadAndInstall()
+
+        val state = checker.state.value as UpdateState.InsufficientStorage
+        assertEquals(threshold + 3 * apkSize - availableBytes, state.missingBytes)
+        assertEquals(available, state.pending)
+        assertEquals(1, reclaimCount)
+        assertEquals(1, server.requestCount) // no download attempted
+    }
+
+    @Test
+    fun `freeing caches recovers enough space and the download proceeds`() {
+        enqueueRelease(size = 4)
+        val checker = checker()
+        checker.checkForUpdate()
+        availableBytes = threshold // short by the APK sizes only
+        onReclaim = { availableBytes += UpdateStorage.MB }
+        server.enqueue(MockResponse().setBody(Buffer().write(byteArrayOf(1, 2, 3, 4))))
+        checker.downloadAndInstall()
+
+        assertEquals(1, reclaimCount)
+        assertTrue(checker.state.value is UpdateState.ReadyToInstall)
+    }
+
+    @Test
+    fun `retry after freeing space starts the download`() {
+        enqueueRelease(size = 4)
+        val checker = checker()
+        checker.checkForUpdate()
+        availableBytes = 0
+        checker.downloadAndInstall()
+        assertTrue(checker.state.value is UpdateState.InsufficientStorage)
+
+        checker.retryAfterStorage() // still full
+        assertTrue(checker.state.value is UpdateState.InsufficientStorage)
+        assertEquals(2, reclaimCount)
+
+        availableBytes = totalBytes / 2
+        server.enqueue(MockResponse().setBody(Buffer().write(byteArrayOf(1, 2, 3, 4))))
+        checker.retryAfterStorage()
+        assertTrue(checker.state.value is UpdateState.ReadyToInstall)
+    }
+
+    @Test
+    fun `installApk re-checks space and 重試 resumes the install`() {
+        val apkSize = 4L
+        enqueueRelease(size = apkSize)
+        val checker = checker()
+        checker.checkForUpdate()
+        // Enough space for the download; something else fills the disk before 安裝.
+        server.enqueue(MockResponse().setBody(Buffer().write(byteArrayOf(1, 2, 3, 4))))
+        checker.downloadAndInstall()
+        assertTrue(checker.state.value is UpdateState.ReadyToInstall)
+
+        // installApk re-checks.
+        availableBytes = threshold
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        checker.installApk(activity)
+        val state = checker.state.value as UpdateState.InsufficientStorage
+        assertEquals(2 * apkSize, state.missingBytes)
+        val pending = state.pending as UpdateState.ReadyToInstall
+        assertTrue(pending.file.isFile)
+        assertNull(org.robolectric.Shadows.shadowOf(activity).nextStartedActivity)
+
+        // 重試 with space: back to ReadyToInstall with autoLaunch (MainActivity launches it).
+        availableBytes = totalBytes / 2
+        checker.retryAfterStorage()
+        val ready = checker.state.value as UpdateState.ReadyToInstall
+        assertTrue(ready.autoLaunch)
+        assertEquals(pending.file, ready.file)
+    }
+
+    @Test
+    fun `space used up by the download is reported before the installer is launched`() {
+        enqueueRelease(size = 4)
+        val checker = checker()
+        checker.checkForUpdate()
+        // Plenty before the download; the disk fills up while downloading.
+        var reads = 0
+        storageReader = { if (reads++ == 0) totalBytes / 2 else threshold + 7 }
+        server.enqueue(MockResponse().setBody(Buffer().write(byteArrayOf(1, 2, 3, 4))))
+        checker.downloadAndInstall()
+
+        val state = checker.state.value as UpdateState.InsufficientStorage
+        assertEquals(1, state.missingBytes) // threshold + 2 * 4 needed
+        assertEquals(1, reclaimCount)
+        val pending = state.pending as UpdateState.ReadyToInstall
+        assertTrue(pending.file.isFile) // kept for 重試
+    }
+
+    @Test
+    fun `stale update files are deleted when a check starts`() {
+        val dir = tmp.root.resolve("updates").apply { mkdirs() }
+        val stale = dir.resolve("update.apk").apply { writeBytes(byteArrayOf(1, 2)) }
+        val part = dir.resolve("update.apk.part").apply { writeBytes(byteArrayOf(1)) }
+        enqueueRelease(tag = "v1.0.0")
+        checker().checkForUpdate()
+        assertFalse(stale.exists())
+        assertFalse(part.exists())
+    }
+
+    @Test
+    fun `apk ready to install is not deleted by a check`() {
+        enqueueRelease(size = 4)
+        val checker = checker()
+        checker.checkForUpdate()
+        server.enqueue(MockResponse().setBody(Buffer().write(byteArrayOf(1, 2, 3, 4))))
+        checker.downloadAndInstall()
+        val ready = checker.state.value as UpdateState.ReadyToInstall
+
+        checker.checkForUpdate() // not Idle: no cleanup
+        assertTrue(ready.file.isFile)
     }
 }

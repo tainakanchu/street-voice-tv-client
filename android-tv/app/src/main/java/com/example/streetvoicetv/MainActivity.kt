@@ -249,6 +249,7 @@ fun StreetVoiceTvApp(
         onUpdate = { updateChecker.downloadAndInstall() },
         onDismissUpdate = { updateChecker.dismiss() },
         onInstallUpdate = { updateChecker.installApk(activity) },
+        onRetryUpdateStorage = { updateChecker.retryAfterStorage() },
         contentHost = { content ->
             AppMessageHost(appMessages) {
                 SongMenuHost(
@@ -425,6 +426,7 @@ fun AppScaffold(
     onUpdate: () -> Unit,
     onDismissUpdate: () -> Unit,
     onInstallUpdate: () -> Unit = {},
+    onRetryUpdateStorage: () -> Unit = {},
     /** Wraps the screen content (app-wide layers such as the song context menu). */
     contentHost: @Composable (content: @Composable () -> Unit) -> Unit = { it() },
     content: @Composable () -> Unit,
@@ -498,6 +500,7 @@ fun AppScaffold(
                 onUpdate = onUpdate,
                 onDismiss = onDismissUpdate,
                 onInstall = onInstallUpdate,
+                onRetryStorage = onRetryUpdateStorage,
             )
         }
     }

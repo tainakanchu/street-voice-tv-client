@@ -1,5 +1,9 @@
 package com.example.streetvoicetv.ui.update
 
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
+import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
@@ -24,6 +28,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -35,6 +40,7 @@ import androidx.tv.material3.OutlinedButton
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.example.streetvoicetv.data.update.UpdateState
+import com.example.streetvoicetv.data.update.UpdateStorage
 import com.example.streetvoicetv.ui.common.UserMessages
 import com.example.streetvoicetv.ui.components.ModalFocusTrap
 import com.example.streetvoicetv.ui.components.requestFocusWhenReady
@@ -55,8 +61,10 @@ fun UpdateDialog(
     onUpdate: () -> Unit,
     onDismiss: () -> Unit,
     onInstall: () -> Unit = {},
+    onRetryStorage: () -> Unit = {},
 ) {
     if (state is UpdateState.Idle) return
+    val context = LocalContext.current
 
     val primaryFocus = remember { FocusRequester() }
     val bodyFocus = remember { FocusRequester() }
@@ -150,6 +158,22 @@ fun UpdateDialog(
                         ) { Text("關閉") }
                     }
 
+                    is UpdateState.InsufficientStorage -> {
+                        DialogTitle("儲存空間不足", color = MaterialTheme.colorScheme.error)
+                        Spacer(Modifier.height(12.dp))
+                        DialogMessage(storageMessage(state.missingBytes))
+                        Spacer(Modifier.height(24.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            OutlinedButton(onClick = onDismiss) { Text("關閉") }
+                            // Not disabled while re-checking: a disabled button would drop D-pad focus.
+                            OutlinedButton(onClick = onRetryStorage) { Text("重試") }
+                            Button(
+                                onClick = { openStorageSettings(context) },
+                                modifier = Modifier.focusRequester(primaryFocus),
+                            ) { Text("開啟儲存空間設定") }
+                        }
+                    }
+
                     else -> {}
                 }
             }
@@ -158,6 +182,25 @@ fun UpdateDialog(
 
     LaunchedEffect(state::class) {
         if (hasButton) primaryFocus.requestFocusWhenReady() else bodyFocus.requestFocusWhenReady()
+    }
+}
+
+internal fun storageMessage(missingBytes: Long): String =
+    "電視的儲存空間不足，無法安裝更新。還需要約 ${UpdateStorage.toMbCeil(missingBytes)} MB 的可用空間。" +
+        "請到「設定 > 應用程式」清除其他應用程式的快取後再試一次。"
+
+/** The system storage screen (or the settings top level where it does not exist). */
+private fun openStorageSettings(context: Context) {
+    fun intent(action: String) = Intent(action).apply {
+        if (context !is android.app.Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    try {
+        context.startActivity(intent(Settings.ACTION_INTERNAL_STORAGE_SETTINGS))
+    } catch (_: ActivityNotFoundException) {
+        try {
+            context.startActivity(intent(Settings.ACTION_SETTINGS))
+        } catch (_: ActivityNotFoundException) {
+        }
     }
 }
 
