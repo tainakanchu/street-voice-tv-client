@@ -43,6 +43,11 @@ import javax.inject.Singleton
  * - The download is written to `updates/update.apk.part`, verified against the release asset
  *   size and only then renamed to `updates/update.apk` (the only directory the FileProvider
  *   exposes).
+ * - Installs fail silently when /data is below the system's low-storage threshold, so free
+ *   space is checked before downloading and before launching the installer (after first
+ *   freeing the app's own caches via [CacheReclaimer]); a shortfall becomes
+ *   [UpdateState.InsufficientStorage]. Leftover APKs from earlier updates are deleted when a
+ *   check starts.
  */
 @Singleton
 class UpdateChecker internal constructor(
@@ -54,12 +59,15 @@ class UpdateChecker internal constructor(
     private val releaseUrl: String,
     private val dispatcher: CoroutineDispatcher,
     private val clock: () -> Long,
+    private val storageStats: StorageStats,
+    private val cacheReclaimer: CacheReclaimer,
 ) {
     @Inject
     constructor(
         @ApplicationContext context: Context,
         client: OkHttpClient,
         json: Json,
+        cacheReclaimer: CacheReclaimer,
     ) : this(
         updatesDir = File(context.cacheDir, UPDATES_DIR),
         prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE),
@@ -69,6 +77,8 @@ class UpdateChecker internal constructor(
         releaseUrl = "https://api.github.com/repos/$GITHUB_REPO/releases/latest",
         dispatcher = Dispatchers.IO,
         clock = System::currentTimeMillis,
+        storageStats = StatFsStorageStats(context.filesDir),
+        cacheReclaimer = cacheReclaimer,
     )
 
     // Shares the app client's connection pool / dispatcher. Its HTTP cache is disabled here:
@@ -87,6 +97,13 @@ class UpdateChecker internal constructor(
     private var checkJob: Job? = null
     private var downloadJob: Job? = null
 
+    /**
+     * Guards [updatesDir] between the stale-APK cleanup and the start of a download: the
+     * cleanup only deletes while the state is Idle, and a download sets Downloading before
+     * creating its file under this lock, so a fresh download is never deleted.
+     */
+    private val filesLock = Any()
+
     /** Version the user answered "稍後" to in this process; not offered again until restart. */
     @Volatile private var dismissedVersion: String? = null
 
@@ -99,6 +116,7 @@ class UpdateChecker internal constructor(
         if (checkJob?.isActive == true) return
         checkJob = scope.launch {
             if (initialDelayMs > 0) delay(initialDelayMs)
+            deleteStaleApks()
             try {
                 val release = latestRelease() ?: return@launch
                 val latestVersion = release.tagName.removePrefix("v")
@@ -158,8 +176,21 @@ class UpdateChecker internal constructor(
         if (!_state.compareAndSet(current, UpdateState.Downloading(0f))) return
         downloadJob = scope.launch {
             try {
+                // Before downloading: room for the APK, the installer's copy and dexopt.
+                val missing = ensureSpace(current.size, UpdateStorage.DOWNLOAD_APK_FACTOR, keep = null)
+                if (missing > 0) {
+                    _state.value = UpdateState.InsufficientStorage(missing, pending = current)
+                    return@launch
+                }
                 val file = download(current)
-                _state.value = UpdateState.ReadyToInstall(file)
+                val ready = UpdateState.ReadyToInstall(file)
+                // The APK itself took space: check again before the installer is launched.
+                val missingForInstall = ensureSpace(file.length(), UpdateStorage.INSTALL_APK_FACTOR, keep = file)
+                _state.value = if (missingForInstall > 0) {
+                    UpdateState.InsufficientStorage(missingForInstall, pending = ready)
+                } else {
+                    ready
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -169,10 +200,83 @@ class UpdateChecker internal constructor(
         }
     }
 
+    /**
+     * 儲存空間不足 → 重試: frees the caches again and re-checks. With enough room the pending step
+     * continues (the download starts, or the installer is launched via `autoLaunch`);
+     * otherwise the state stays [UpdateState.InsufficientStorage] with the new shortfall.
+     */
+    fun retryAfterStorage() {
+        val current = _state.value as? UpdateState.InsufficientStorage ?: return
+        if (current.isChecking) return
+        when (val pending = current.pending) {
+            is UpdateState.Available -> {
+                // downloadAndInstall() frees caches and checks again.
+                if (_state.compareAndSet(current, pending)) downloadAndInstall()
+            }
+            is UpdateState.ReadyToInstall -> {
+                val checking = current.copy(isChecking = true)
+                if (!_state.compareAndSet(current, checking)) return
+                scope.launch {
+                    val missing = try {
+                        if (!pending.file.isFile) throw IOException("Update file missing")
+                        ensureSpace(pending.file.length(), UpdateStorage.INSTALL_APK_FACTOR, keep = pending.file)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        log("Storage re-check failed", e)
+                        _state.compareAndSet(checking, UpdateState.Error(e.message ?: "Install failed", isInstallError = true))
+                        return@launch
+                    }
+                    _state.compareAndSet(
+                        checking,
+                        if (missing > 0) {
+                            UpdateState.InsufficientStorage(missing, pending = pending)
+                        } else {
+                            pending.copy(autoLaunch = true, installerLaunched = false, needsPermission = false)
+                        },
+                    )
+                }
+            }
+            else -> {}
+        }
+    }
+
+    /**
+     * Bytes still missing for an APK of [apkSize] (x [factor]). When short, first frees the
+     * app's caches and leftover update files (except [keep]) and checks again. Blocking.
+     */
+    private fun ensureSpace(apkSize: Long, factor: Int, keep: File?): Long {
+        val missing = UpdateStorage.missingBytes(storageStats.read(), apkSize, factor)
+        if (missing <= 0) return 0
+        log("Low storage: $missing bytes missing, freeing caches", null)
+        try {
+            cacheReclaimer.reclaim()
+        } catch (e: Exception) {
+            log("Freeing caches failed", e)
+        }
+        deleteUpdateFiles(keep)
+        return UpdateStorage.missingBytes(storageStats.read(), apkSize, factor)
+    }
+
+    /** Deletes APKs of earlier updates (already installed, or abandoned) while nothing is in progress. */
+    private fun deleteStaleApks() {
+        synchronized(filesLock) {
+            if (_state.value != UpdateState.Idle) return
+            deleteUpdateFiles(keep = null)
+        }
+    }
+
+    private fun deleteUpdateFiles(keep: File?) {
+        updatesDir.listFiles()?.forEach { if (it != keep) it.delete() }
+    }
+
     private suspend fun download(update: UpdateState.Available): File {
-        if (!updatesDir.isDirectory && !updatesDir.mkdirs()) throw IOException("Cannot create $updatesDir")
         val part = File(updatesDir, "$APK_NAME.part")
         val target = File(updatesDir, APK_NAME)
+        synchronized(filesLock) {
+            if (!updatesDir.isDirectory && !updatesDir.mkdirs()) throw IOException("Cannot create $updatesDir")
+            part.createNewFile()
+        }
         try {
             val request = Request.Builder().url(update.downloadUrl).build()
             client.newCall(request).execute().use { response ->
@@ -224,6 +328,16 @@ class UpdateChecker internal constructor(
         val current = _state.value as? UpdateState.ReadyToInstall ?: return
         try {
             if (!current.file.isFile) throw IOException("Update file missing")
+            // An installer launched without enough room fails without telling the user.
+            val missing = UpdateStorage.missingBytes(
+                storageStats.read(),
+                current.file.length(),
+                UpdateStorage.INSTALL_APK_FACTOR,
+            )
+            if (missing > 0) {
+                _state.value = UpdateState.InsufficientStorage(missing, pending = current)
+                return
+            }
             if (!activity.packageManager.canRequestPackageInstalls()) {
                 _state.value = current.copy(autoLaunch = false, needsPermission = true)
                 activity.startActivity(
@@ -405,6 +519,17 @@ sealed class UpdateState {
     ) : UpdateState()
 
     data class Error(val message: String, val isInstallError: Boolean = false) : UpdateState()
+
+    /**
+     * Not enough free space to download ([pending] is [Available]) or install ([pending] is
+     * [ReadyToInstall]) the update, even after freeing the app's caches. [missingBytes] more
+     * are needed. [isChecking]: 重試 is re-checking.
+     */
+    data class InsufficientStorage(
+        val missingBytes: Long,
+        val pending: UpdateState,
+        val isChecking: Boolean = false,
+    ) : UpdateState()
 }
 
 @Serializable

@@ -63,6 +63,15 @@ class UpdateDialogScreenshotTest {
     )
 
     @Test
+    fun update_insufficient_storage() = capture(
+        "update_insufficient_storage",
+        UpdateState.InsufficientStorage(
+            missingBytes = 87L * 1024 * 1024,
+            pending = UpdateState.Available("0.2.0", "https://example.invalid/app.apk"),
+        ),
+    )
+
+    @Test
     fun update_available_focused() = compose.captureTv(
         "update_available_focused",
         updateState = UpdateState.Available("0.2.0", "https://example.invalid/app.apk"),
